@@ -1,6 +1,10 @@
 //
 //	MP3 decoding using libMAD
 //
+//      (c) 1999-2004 Jim Peters <jim@uazu.net>.  All Rights Reserved.
+//      For latest version see http://sbagen.sf.net/ or
+//      http://uazu.net/sbagen/.  Released under the GNU GPL version 2.
+//
 
 #include "libs/mad.h"
 

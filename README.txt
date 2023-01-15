@@ -15,8 +15,9 @@ focus.txt /	Some notes on the scripts that were derived from reported
  wave.txt	 Monroe Institute focus levels
 holosync.txt	Some notes on the CenterPointe Holosync techniques
 theory*.txt	Some notes from my own experimentation
+river*.ogg	Loopable background river sound OGG file (under CC license)
 
 sbagen.c etc	The source code
 mk		A short script to build using GCC on Linux
-mk-*		Scripts to build on other platforms -- see the comments in the files
+mk-*		Scripts to build on other platforms -- see the comments in files
 

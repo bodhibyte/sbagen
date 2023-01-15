@@ -1,0 +1,8 @@
+##
+##      Hour-long "-p drop" session at level 00ds+ mixed with river sounds.
+##      When this level becomes 'boring', edit the file to move onto 01ds+, 
+##      then 02ds+, and so on.  See SBAGEN.TXT for a full explanation.
+##
+
+-m river1.ogg -p drop 00ds+ mix/100
+
