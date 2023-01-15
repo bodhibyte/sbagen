@@ -29,6 +29,7 @@ static void looper_sched2() ;
 
 static OggVorbis_File oggfile;
 static short *ogg_buf0, *ogg_buf1, *ogg_rd, *ogg_end;
+static int ogg_mult;
 
 void 
 ogg_init() {
@@ -41,8 +42,25 @@ ogg_init() {
    if (0 > ov_open(mix_in, &oggfile, NULL, 0) < 0) 
       error("Input does not appear to be an Ogg bitstream");
 
-   // Check to see is this is a looping OGG
+   // Check for ReplayGain
    vc= ov_comment(&oggfile, -1);
+   ogg_mult= 16;
+   for (a= 0; a<vc->comments; a++) {
+      char *str= vc->user_comments[a];
+      if (0 == memcmp(str, "REPLAYGAIN_TRACK_GAIN=", 22)) {
+	 char *end;
+	 double val= strtod(str += 22, &end);
+	 if (end == str) 
+	    warn("Ignoring bad REPLAYGAIN_TRACK_GAIN: %s", str);
+	 else {
+	    val -= 3;		// Adjust vorbisgain's 89dB to 86dB
+	    ogg_mult= (int)(floor(0.5 + 16 * pow(10, val/20)));
+	    warn("ReplayGain setting detected, Ogg scaling by %.2f", ogg_mult/16.0);
+	 }
+      }
+   }
+
+   // Check to see is this is a looping OGG
    for (a= 0; a<vc->comments; a++) {
       if (0 == memcmp(vc->user_comments[a], "SBAGEN_LOOPER=", 14)) {
 	 vc= 0; break;
@@ -89,7 +107,7 @@ ogg_read(int *dst, int dlen) {
       // Copy data from buffer
       if (ogg_rd != ogg_end) {
 	 while (ogg_rd != ogg_end && dst != dst1)
-	    *dst++= *ogg_rd++ << 4;
+	    *dst++= *ogg_rd++ * ogg_mult;
 	 continue;
       }
 
@@ -516,10 +534,10 @@ looper_read(int *dst, int dlen) {
 	    if (aa->chan && ch2_swap) {
 	       // Output with swapped L+R
 	       while (cnt > 0 && aa->b_rd != aa->b_end) {
-		  uint amp= (~aa->amp) >> 16; amp= (~(amp*amp))>>20;
+		  uint amp= (~aa->amp) >> 16; amp= (~(amp*amp))>>21; amp *= ogg_mult;
 		  cnt--;
-		  *dst++ += ((int)(aa->b_rd[1] * amp)) >> 8;
-		  *dst++ += ((int)(aa->b_rd[0] * amp)) >> 8;
+		  *dst++ += ((int)(aa->b_rd[1] * amp)) >> 11;
+		  *dst++ += ((int)(aa->b_rd[0] * amp)) >> 11;
 		  aa->b_rd += 2;
 		  aa->amp += aa->del;
 		  aa->cnt--;
@@ -527,10 +545,10 @@ looper_read(int *dst, int dlen) {
 	    } else {
 	       // Output with normal L+R 
 	       while (cnt > 0 && aa->b_rd != aa->b_end) {
-		  uint amp= (~aa->amp) >> 16; amp= (~(amp*amp))>>20;
+		  uint amp= (~aa->amp) >> 16; amp= (~(amp*amp))>>21; amp *= ogg_mult;
 		  cnt--;
-		  *dst++ += ((int)(*aa->b_rd++ * amp)) >> 8;
-		  *dst++ += ((int)(*aa->b_rd++ * amp)) >> 8;
+		  *dst++ += ((int)(*aa->b_rd++ * amp)) >> 11;
+		  *dst++ += ((int)(*aa->b_rd++ * amp)) >> 11;
 		  aa->amp += aa->del;
 		  aa->cnt--;
 	       }

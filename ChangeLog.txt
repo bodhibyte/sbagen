@@ -1,3 +1,10 @@
+1.4.1	Added wakeup option to -p drop
+	Permitted duration of -p drop session to be modified
+	Added ReplayGain handling for OGG files
+	Applied vorbisgain to river sound files
+	Added support for writing to a WAV file through Windows right-click menu
+	River sounds now distributed in separate archive, except on Windows
+
 1.4.0	Added support for randomly looping OGG files with SBAGEN_LOOPER tag
 	Added two standard looping river sounds OGG files to archive
 	Added <carr>/<amp> for handling plain sine tones (no beats)

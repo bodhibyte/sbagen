@@ -1,7 +1,9 @@
 ##
 ##      Half-hour demo 'drop' session at level 00d, returning to
-##      waking frequencies at the end.  Note that drops can now be 
-##      generated using the -p drop option.
+##      waking frequencies at the end.  
+##
+##	Note that drops can now be generated using the -p drop option --
+##	see the prog-drop-00d sequence file.
 ##
 
 -SE -m river1.ogg

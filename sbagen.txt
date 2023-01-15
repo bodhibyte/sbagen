@@ -50,9 +50,11 @@ Contents of this document:
 3.2: Mixing in background sounds
 3.3: Standard background sounds
 3.4: Creating loopable OGGs
+3.4.1: Using ReplayGain with OGG files
 3.5: Compensating for headphone low frequency roll-off
 3.6: The 'drop' sequences
 3.6.1: More detailed notes on -p drop options
+3.6.2: Adjusting the length of a -p drop session
 3.7: The 'slide' sequences
 
 4: Writing sequence files
@@ -216,19 +218,38 @@ other UNIX users, there are some scripts, and it should be easy enough
 to build, but you're somewhat on your own.  If you get in trouble, I
 will help if I can, though -- E-mail me.
 
-Windows and Linux users may also be interested in looking at SBaGUI,
-written by James Stone, which provides a simple Python GUI wrapper for
-some of SBaGen's features:
-
-  http://sbagen.opensrc.org/wiki.php?page=SBaGUI
-
-See also my site for a FAQ and other related links:
+See my site for a FAQ and other related links:
   
   http://uazu.net/sbagen/
 
 
 2.1: Installation for Windows users
 -----------------------------------
+
+Since version 1.4.0, I am using InnoSetup for distributing SBaGen,
+which gives Windows users a proper installer.  This should make things
+very straightforward.  You can still access SBaGen from the DOS prompt
+directly if you like (see below), but now you can also do most things
+from the desktop:
+
+- To run a sequence, double-click on the icon.  This brings up a DOS
+  window in which SBaGen runs.  To stop SBaGen playing, press Ctrl-C.
+
+- To edit a sequence, right-click and select "Edit sequence", which
+  will bring up NotePad, or your default editor.
+
+- To write a WAV file from a sequence instead of playing it,
+  right-click and select "Write to WAV".  A file 'out.wav' will be
+  generated.  (Note that this only works with sequences that have a
+  fixed length.)  You can also do this by adding "-Wo out.wav" near
+  the top of a SBG file.
+
+If you need more features than this, you may still need to use the DOS
+prompt, but hopefully you won't.
+
+
+2.1.1: Installation of pre-1.4.0 versions for Windows users
+-----------------------------------------------------------
 
 Download the ZIP archive and unpack it somewhere suitable.  Unpacking
 it in C:\ seems a good idea to me, because that way it is easier to
@@ -754,6 +775,20 @@ The initial part is read in all cases, and then #0, #1 and #2 can be
 used to select different cross-fade times.
 
 
+3.4.1: Using ReplayGain with OGG files
+--------------------------------------
+
+SBaGen supports ReplayGain tags in the OGG header.  What this means is
+that if you run 'vorbisgain' on your OGG file to add this tag, your
+OGG file should come out sounding around about the same loudness level
+as everyone else's OGG files (including river1.ogg and river2.ogg).
+It does this by recording the necessary volume adjustment in the OGG
+header, and then SBaGen picks this up and adjusts the volume level
+accordingly.  This makes it easier for people to substitute one OGG
+for another in their sequences.  (Thanks to Dylan Carlson for
+suggesting this.)
+
+
 3.5: Compensating for headphone low frequency roll-off
 ------------------------------------------------------
 
@@ -875,6 +910,12 @@ these with river sounds, for example:
 
   sbagen -m river1.ogg -p drop 00ds+ mix/100
 
+If you are doing sessions in the middle of the day, you may want to
+add a 'wake-up' at the end using '^', which brings you up to alpha
+again at the end:
+
+  sbagen -m river1.ogg -p drop 00ds+^ mix/100
+
 Once you have completed level 00, you can move onto the next (01, 02,
 03, etc).  However if you like, instead you can try increasing the
 depth of the session.  In 00ds+, the 'd' indicates that it goes down
@@ -892,12 +933,14 @@ lots of practice.
 
 Usage: 
 
-  -p drop <digit><digit>[.<digit>...]<a-l>[s|k][+][/<amp>] <tone-specs> ...
+  -p drop <digit><digit>[.<digit>...]<a-l>[s|k][+][^][/<amp>] <tone-specs> ...
 
 Examples:
 
+  -p drop 00a
   -p drop 00ds+
-  -p drop 34.4dk+/0.5 pink/30 
+  -p drop 20fs+^/2 mix/98
+  -p drop 34.5dk+/1.5 pink/30 
 
 The argument after the "drop" gives the level and depth of the
 sequence to run.  The digits 00 to 99 select the level, based on
@@ -939,6 +982,12 @@ minutes of the session.  By adding a '+' (00ds versus 00ds+) an extra
 30 minutes are added keeping you at the target beat frequency whilst
 still continuing to gently drop the carrier.
 
+Normally the sequence fades out at the deepest beat frequency.
+However, if you need to get on with your day immediately after doing a
+session, you may want to add the 'wake-up' option by adding a '^'.
+This adds a 3-minute slide back up to the initial frequencies to wake
+you up.
+
 The optional '/<amp>' on the end lets you change the amplitude of the
 waves if necessary (e.g. 00ds+/2).  By default, the level is set to 1.
 
@@ -946,6 +995,32 @@ After the spec comes an optional list of normal tone-sets.  These can
 be used to add mix sounds (e.g. mix/100) or pink noise (pink/30) or
 other sounds to the beats.  Anything you add here will automatically
 be faded in and out at the start and end of the session.
+
+
+3.6.2: Adjusting the length of a -p drop session
+------------------------------------------------
+
+An optional specification may be added after -p drop and before the
+drop specification to adjust the length of the -p drop session from
+the standard of a 30-minute 'drop' part, optional 30-minute hold and
+optional 3-minute wake-up.  This is formatted as follows:
+
+  t<drop-time>,<hold-time>,<wake-time>
+
+For example:
+ 
+  t40,10,5
+
+The above example gives a 40-minute drop part, optional 10 minute
+hold, and optional 5 minute wake-up.  It might be used as follows:
+
+  sbagen -m river2.ogg -p drop t40,10,5 20ds+^/2 mix/98
+
+This way you can create -p drop sessions of whatever length you wish.
+Note that lengths are rounded to the nearest minute, and may also be
+rounded further if necessary if the session is based on 3-minute
+steps.  Also note that you must include the lengths for all three
+parts even if you are not using '+' or '^' for a hold or wake-up part.
 
 
 3.7: The 'slide' sequences

@@ -1,26 +1,28 @@
 ##
+##      EXPERIMENTAL OVERNIGHT SEQUENCE
+##
 ##	Some idea of having a constant mash of different 
 ##	frequencies fading in and out, similar to the effect of
 ##	that Tibetan Bells tape.
 ##
-##	For carrier frequencies note:
-##	  +20% is pure-tuned minor-third above
-##	  +25% is pure-tuned major-third above
-##	  +50% is perfect fifth above
-##	  +100% is octave above
-##
-##	Carrier frequencies 
-##	 100 200 400 800
-##	     250 500
-##	 150 300 600
-##
-##	 100 and 125 would be too close together - 25 Hz is in beta
-##	 range
-##	 
-##	Carrier frequency cycle:
-##	 100  150  200  ...
-##	 250  400  300  ...
-##	 600  800  500  ...
+#	For carrier frequencies note:
+#	  +20% is pure-tuned minor-third above
+#	  +25% is pure-tuned major-third above
+#	  +50% is perfect fifth above
+#	  +100% is octave above
+#
+#	Carrier frequencies 
+#	 100 200 400 800
+#	     250 500
+#	 150 300 600
+#
+#	 100 and 125 would be too close together - 25 Hz is in beta
+#	 range
+#	 
+#	Carrier frequency cycle:
+#	 100  150  200  ...
+#	 250  400  300  ...
+#	 600  800  500  ...
 
 # Carrier structure
 #ts-1: 100+/30 - 250+/20 - 600+/5

@@ -6,7 +6,8 @@ installation you will find an examples directory on your desktop, and
 you can play any of the SBaGen sequence files inside it by
 double-clicking on them.  Stop a sequence by using Ctrl-C.  If you
 want to edit a sequence instead of playing it, right-click and select
-"Edit sequence".
+"Edit sequence".  If you want to write a sequence to disk as a WAV
+file (out.wav), right-click and select "Write to WAV".
 
 Every new version of SBaGen now installs in two places -- into the
 Program Files directory, and also into an examples directory on the

@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.4.0"
+#define VERSION "1.4.1"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -139,7 +139,8 @@
 #endif
 
 #ifdef OSS_AUDIO
- #include <sys/soundcard.h>
+ #include <linux/soundcard.h>
+ //WAS: #include <sys/soundcard.h>
 #endif
 #ifdef WIN_AUDIO
  #include <windows.h>
@@ -2953,10 +2954,12 @@ readPreProg(int ac, char **av) {
 
 void 
 bad_drop() {
-   error("Bad arguments: expecting -p drop <drop-spec> <optional-tone-specs>"
-	 NL "<drop-spec> is <digit><digit>[.<digit>...]<a-l>[s|k][+][/<amp>]"
-	 NL "<optional-tone-specs> lets you mix other stuff with the drop sequence"
-	 NL "  like pink noise or a mix soundtrack, e.g 'pink/20' or 'mix/60'");
+   error("Bad arguments: expecting -p drop [<time-spec>] <drop-spec> [<tone-specs...>]"
+	 NL "<drop-spec> is <digit><digit>[.<digit>...]<a-l>[s|k][+][^][/<amp>]"
+	 NL "The optional <time-spec> is t<drop-time>,<hold-time>,<wake-time>, all times"
+	 NL "  in minutes (the default is equivalent to 't30,30,3')."
+	 NL "The optional <tone-specs...> let you mix other stuff with the drop"
+	 NL "  sequence like pink noise or a mix soundtrack, e.g 'pink/20' or 'mix/60'");
 }
 
 //
@@ -2972,17 +2975,30 @@ create_drop(int ac, char **av) {
    char *fmt;
    char *p, *q;
    int a;
-   int slide, n_step, islong, stepslide;
-   double carr, amp, c0, c1, c2;
+   int slide, n_step, islong, wakeup;
+   double carr, amp, c0, c2;
    double beat_target;
-   int len;
    double beat[40];
    static double beat_targets[]= { 
       4.4, 3.7, 3.1, 2.5, 2.0, 1.5, 1.2, 0.9, 0.7, 0.5, 0.4, 0.3
    };
    char extra[256];
+   int len, len0= 1800, len1= 1800, len2= 180;
+   int steplen, end;
    
 #define BAD bad_drop()
+
+   // Pick up optional time-spec
+   if (ac < 1) BAD;
+   if (av[0][0] == 't') {
+      double v0, v1, v2;
+      char dmy;
+      if (3 != sscanf(av[0]+1, "%lf,%lf,%lf %c", &v0, &v1, &v2, &dmy)) BAD;
+      len0= 60 * (int)v0;	// Whole minutes only
+      len1= 60 * (int)v1;
+      len2= 60 * (int)v2;
+      ac--; av++;
+   }
 
    // Handle argument list
    if (ac < 1) BAD;
@@ -3004,13 +3020,18 @@ create_drop(int ac, char **av) {
    beat_target= beat_targets[a];
 
    slide= 0;
-   n_step= 10;
-   if (*p == 's') { slide= 1; p++; }
-   else if (*p == 'k') { n_step= 30; p++; }
-   stepslide= n_step > 20 ? 5 : 10;      // Seconds slide between steps
+   steplen= 180;
+   if (*p == 's') { p++; slide= 1; steplen= 60; }
+   else if (*p == 'k') { p++; steplen= 60; }
+   n_step= 1 + (len0-1) / steplen;	// Round up
+   len0= n_step * steplen;
+   if (!slide) len1= (1 + (len1-1) / steplen) * steplen;
 
    islong= 0;
    if (*p == '+') { islong= 1; p++; }
+
+   wakeup= 0;
+   if (*p == '^') { wakeup= 1; p++; }
 
    amp= 1.0;
    if (*p == '/') {
@@ -3025,9 +3046,8 @@ create_drop(int ac, char **av) {
 #undef BAD
       
    // Sort out carriers
-   len= islong ? 3600 : 1800;
+   len= islong ? len0 + len1 : len0;
    c0= carr + 5.0;
-   c1= carr + (islong ? 2.5 : 0);
    c2= carr;
 
    // Calculate beats
@@ -3037,16 +3057,21 @@ create_drop(int ac, char **av) {
    // Display summary
    warn("DROP summary:");
    if (slide) {
-      warn(" Carrier slides from %gHz to %gHz", c0, c2);
-      warn(" Beat frequency slides from %gHz to %gHz", 
-	   beat[0], beat[n_step-1]);
+      warn(" Carrier slides from %gHz to %gHz over %d minutes", 
+	   c0, c2, len/60);
+      warn(" Beat frequency slides from %gHz to %gHz over %d minutes", 
+	   beat[0], beat[n_step-1], len0/60);
    } else {
-      warn(" Carrier steps from %gHz to %gHz", c0, c2);
-      warn(" Beat frequency steps from %gHz to %gHz:", 
-	   beat[0], beat[n_step-1]);
+      warn(" Carrier steps from %gHz to %gHz over %d minutes", 
+	   c0, c2, len/60);
+      warn(" Beat frequency steps from %gHz to %gHz over %d minutes:", 
+	   beat[0], beat[n_step-1], len0/60);
       fprintf(stderr, "   ");
       for (a= 0; a<n_step; a++) fprintf(stderr, " %.2f", beat[a]);
       fprintf(stderr, "\n");
+   }
+   if (wakeup) {
+      warn(" Final wake-up of %d minutes, to return to initial frequencies", len2/60);
    }
 
    // Start generating sequence
@@ -3059,9 +3084,9 @@ create_drop(int ac, char **av) {
    if (slide) {
       // Slide version
       for (a= 0; a<n_step; a++) {
-	 int tim= a * 1800 / (n_step-1);
+	 int tim= a * len0 / (n_step-1);
 	 formatNameDef("ts%02d: %g+%g/%g %s", a, 
-		       c0 + (c1-c0) * tim / 1800.0,
+		       c0 + (c2-c0) * tim * 1.0 / len,
 		       beat[a], amp, extra);
 	 formatTimeLine(tim, "== ts%02d ->", a);
       }
@@ -3069,17 +3094,16 @@ create_drop(int ac, char **av) {
       if (islong) {
 	 formatNameDef("tsend: %g+%g/%g %s",
 		       c2, beat[n_step-1], amp, extra);
-	 formatTimeLine(3600, "== tsend ->");
-	 formatTimeLine(3610, "== off");
-      } else {
-	 formatTimeLine(1810, "== off");
+	 formatTimeLine(len, "== tsend ->");
       }
+      end= len;
    } else {
       // Step version
-      int lim= islong ? n_step*2 : n_step;
+      int lim= len / steplen;
+      int stepslide= steplen < 90 ? 5 : 10;    // Seconds slide between steps
       for (a= 0; a<lim; a++) {
-	 int tim0= a * 1800 / n_step;
-	 int tim1= (a+1) * 1800 / n_step;
+	 int tim0= a * steplen;
+	 int tim1= (a+1) * steplen;
 	 formatNameDef("ts%02d: %g+%g/%g %s", a,
 		       c0 + (c2-c0) * tim1/len,
 		       beat[(a>=n_step) ? n_step-1 : a], 
@@ -3087,8 +3111,17 @@ create_drop(int ac, char **av) {
 	 formatTimeLine(tim0, "== ts%02d ->", a);
 	 formatTimeLine(tim1-stepslide, "== ts%02d ->", a);
       }
-      formatTimeLine(len, "== off");
+      end= len-stepslide;
    }
+   
+   // Wake-up and ending
+   if (wakeup) {
+      formatNameDef("tswake: %g+%g/%g %s",
+		    c0, beat[0], amp, extra);
+      formatTimeLine(end+len2, "== tswake ->");
+      end += len2;
+   } 
+   formatTimeLine(end+10, "== off");
 
    correctPeriods();
 }
@@ -3103,10 +3136,12 @@ create_drop(int ac, char **av) {
 
 void 
 bad_slide() {
-   error("Bad arguments: expecting -p slide [t<duration>] <slide-spec> <optional-tone-specs>"
+   error("Bad arguments: expecting -p slide [<time-spec>] <slide-spec> [<tone-specs...>]"
 	 NL "<slide-spec> is just like a tone-spec: <carrier><sign><beat>/<amp>"
-	 NL "<optional-tone-specs> lets you mix other stuff with the sequence"
-	 NL "  like pink noise or a mix soundtrack, e.g 'pink/20' or 'mix/60'");
+	 NL "The optional <time-spec> is t<slide-time>, giving length of session in"
+	 NL "  minutes (the default is equivalent to 't30')."
+	 NL "The optional <tone-specs...> let you mix other stuff with the drop"
+	 NL "  sequence like pink noise or a mix soundtrack, e.g 'pink/20' or 'mix/60'");
 }
 
 void 

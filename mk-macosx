@@ -26,7 +26,7 @@ xx=libs/macosx-libvorbisidec.a
     ranlib $xx	# OSX is fussy if you copy .a files and insists you run 'ranlib' on them
 }
 
-CC="cc $CFLAGS -Wall -O3 $LIBS -lm -lpthread"
+CC="cc $CFLAGS -Wall -O3 -s $LIBS -lm -lpthread"
 
 $CC sbagen.c -o sbagen || exit 1
 
