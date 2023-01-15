@@ -1,7 +1,7 @@
 //
 //	SBaGen - Sequenced BinAural Generator
 //
-//	(c) 1999-2002 Jim Peters <jim@uazu.net>.  All Rights Reserved.
+//	(c) 1999-2003 Jim Peters <jim@uazu.net>.  All Rights Reserved.
 //	For latest version see http://sbagen.sf.net/ or
 //	http://uazu.net/sbagen/.  Released under the GNU GPL version 2.
 //	Use at your own risk.
@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.0.13"
+#define VERSION "1.0.14"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -36,6 +36,7 @@
 //
 //  T_LINUX	To build the LINUX version with /dev/dsp support
 //  T_MINGW	To build for Windows using MinGW and Win32 calls
+//  T_MSVC	To build for Windows using MSVC and Win32 calls
 //  T_MACOSX	To build for MacOSX using CoreAudio
 //  T_POSIX	To build for simple file output on any Posix-compliant OS
 //
@@ -55,6 +56,11 @@
 #endif
 
 #ifdef T_MINGW
+#define WIN_AUDIO
+#define WIN_TIME
+#endif
+
+#ifdef T_MSVC
 #define WIN_AUDIO
 #define WIN_TIME
 #endif
@@ -91,14 +97,20 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
-#include <sys/time.h>
+
+#ifdef T_MSVC
+ #include <io.h>
+ #define write _write
+#else
+ #include <unistd.h>
+ #include <sys/time.h>
+#endif
 
 #ifdef OSS_AUDIO
  #include <sys/soundcard.h>
@@ -170,7 +182,7 @@ OSStatus mac_callback(AudioDeviceID, const AudioTimeStamp *, const AudioBufferLi
 void 
 usage() {
   error("SBaGen - Sequenced BinAural sound Generator, version " VERSION "\n"
-	"Copyright (c) 1999-2002 Jim Peters, released under the GNU GPL v2\n\n"
+	"Copyright (c) 1999-2003 Jim Peters, released under the GNU GPL v2\n\n"
 	"Usage: sbagen [options] seq-file\n"
 	"       sbagen [options] -i tone-specs ...\n\n"
 	"Options:  -D        Display the full interpreted sequence instead of playing it\n"
@@ -677,6 +689,9 @@ userTime() {
   times(&buf);
   return buf.tms_utime;
 }
+#else
+// Dummy to avoid complaints on MSVC
+int userTime() { return 0; }
 #endif
 
 //
@@ -787,6 +802,12 @@ loop() {
   if (opt_E)
     byte_count= out_bps * (int)(t_per0(now, fast_tim1) * 0.001 * out_rate /
 				(fast ? fast_mult : 1));
+
+  // Do byte-swapping if bigendian and outputting to a file or stream
+  if ((opt_O || opt_o) &&
+      out_mode == 1 && bigendian)
+     out_mode= 2;
+
   if (opt_W)
     writeWAV();
 
@@ -1111,7 +1132,7 @@ corrVal(int running) {
      case 3:
        amp= v0->amp;		// No need to slide, as bell only rings briefly
        carr= v0->carr;
-       ch->amp= ch->v.amp= amp;
+       ch->amp= (int)(ch->v.amp= amp);
        ch->v.carr= carr;
        ch->inc1= (int)(carr / out_rate * ST_SIZ * 65536);
        if (trigger) {		// Trigger the bell only on entering the period
@@ -1484,9 +1505,6 @@ writeWAV() {
   addStr("data");
   addU4(byte_count);
   writeOut(buf, 44);
-
-  if (out_mode == 1 && bigendian) 
-     out_mode= 2;		// Turn on byte-swapping
 
   if (!opt_Q)
     fprintf(stderr, 
