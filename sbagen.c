@@ -17,7 +17,7 @@
 //	If you really don't have a copy of the GNU GPL, I'll send you one.
 //	
 
-#define VERSION "1.0.5"
+#define VERSION "1.0.6"
 
 #ifndef NO_DEV_DSP
 #define DSP		// Define to use /dev/dsp, or comment out if not available
@@ -561,9 +561,10 @@ loop() {
   now= opt_S ? fast_tim0 : calcNow();
   err= fast ? out_buf_ms * (fast_mult - 1) : 0;
   if (opt_L)
-    byte_count= (int)(opt_L * 0.001 * out_rate) * out_bps;
+    byte_count= out_bps * (int)(opt_L * 0.001 * out_rate);
   if (opt_E)
-    byte_count= (int)(t_per0(now, fast_tim1) * 0.001 * out_rate) * out_bps;
+    byte_count= out_bps * (int)(t_per0(now, fast_tim1) * 0.001 * out_rate /
+				(fast ? fast_mult : 1));
   if (opt_W)
     writeWAV();
 
@@ -794,8 +795,10 @@ setup_device(void) {
     if (opt_O)
       out_fd= 1;		// stdout
     else {
-      if (0 > (out_fd= creat(opt_o, 0666))) 
+      FILE *out;		// Need to create a stream to set binary mode for DOS
+      if (!(out= fopen(opt_o, "wb")))
 	error("Can't open \"%s\", errno %d", opt_o, errno);
+      out_fd= fileno(out);
     }
     out_blen= out_rate / 5;		// 10 fragments a second
     while (out_blen & (out_blen-1)) out_blen &= out_blen-1;		// Make power of two
