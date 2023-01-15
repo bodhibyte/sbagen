@@ -24,11 +24,11 @@
 //	under the LGPL (slDSP.cxx and sl.h).  For the original source,
 //	see the PLIB project: http://plib.sf.net
 //
-//	The code for the Mac audio output was based on code from SDL
-//	(Simple Directmedia Layer), (c) 1997-2001 Sam Lantinga,
-//	released under the GPL.  See: http://www.libsdl.org/
+//	The code for the Mac audio output was based on code from the
+//	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
+//	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.0.10"
+#define VERSION "1.0.11"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -36,13 +36,13 @@
 //
 //  T_LINUX	To build the LINUX version with /dev/dsp support
 //  T_MINGW	To build for Windows using MinGW and Win32 calls
-//  T_MACOSX	To build for MacOSX using Carbon audio
+//  T_MACOSX	To build for MacOSX using CoreAudio
 //  T_POSIX	To build for simple file output on any Posix-compliant OS
 //
 
 // Define OSS_AUDIO to use /dev/dsp for audio output
 // Define WIN_AUDIO to use Win32 calls
-// Define MAC_AUDIO to use Mac Carbon calls
+// Define MAC_AUDIO to use Mac CoreAudio calls
 // Define NO_AUDIO if no audio output device is usable
 // Define UNIX_TIME to use UNIX calls for getting time
 // Define WIN_TIME to use Win32 calls for getting time
@@ -109,6 +109,7 @@
 #endif
 #ifdef MAC_AUDIO
  #include <Carbon.h>
+ #include <CoreAudio/CoreAudio.h>
 #endif
 #ifdef UNIX_TIME
  #include <sys/ioctl.h>
@@ -160,7 +161,9 @@ inline int userTime();
 void CALLBACK win32_audio_callback(HWAVEOUT, UINT, DWORD, DWORD, DWORD);
 #endif
 #ifdef MAC_AUDIO
-void callBackProc(SndChannel *chan, SndCommand *cmd);
+OSStatus mac_callback(AudioDeviceID, const AudioTimeStamp *, const AudioBufferList *, 
+		      const AudioTimeStamp *, AudioBufferList *, const AudioTimeStamp *, 
+		      void *inClientData);
 #endif
 
 void 
@@ -305,8 +308,9 @@ char *opt_o;			// File name to output to, or 0
  #define BUFFER_COUNT 8
  #define BUFFER_SIZE 4096*4
  char aud_buf[BUFFER_COUNT][BUFFER_SIZE];
- char aud_bufinuse[BUFFER_COUNT];
- SndChannel *aud_chan;
+ int aud_rd;	// Next buffer to read out of list (to send to device)
+ int aud_wr;	// Next buffer to write.  aud_rd==aud_wr means empty buffer list
+ static AudioDeviceID aud_dev;
 #endif
 
 
@@ -918,92 +922,27 @@ writeOut(char *buf, int siz) {
   }
 #endif
 
+#ifdef MAC_AUDIO
+  if (out_fd == -9999) {
+    int new_wr= (aud_wr + 1) % BUFFER_COUNT;
+
+    // Wait until there is space -- Delay(1, 0) waits approx 1/60 sec
+    // according to Apple docs
+    while (new_wr == aud_rd) Delay(1, 0);
+
+    memcpy(aud_buf[aud_wr], buf, siz);
+    aud_wr= new_wr;
+
+    return;
+  }
+#endif
+
   while (-1 != (rv= write(out_fd, buf, siz))) {
     if (0 == (siz -= rv)) return;
     buf += rv;
   }
   error("Output error");
 }
-
-//
-//	Audio process main loop for Mac OS X.  Note that this runs in
-//	a separate process to avoid the problems caused by UNIX
-//	time-related calls on Mac OS X, which appear to interrupt the
-//	Carbon Sound Manager output stream.  Running this in a
-//	separate process seems to clear this issue.  Audio is piped to
-//	this process in the same way as it would be written to
-//	/dev/dsp on Linux.
-// 
-
-#ifdef MAC_AUDIO
-void 
-mac_audio_loop(int fd) {
-  SndCallBackUPP callback;
-  callback= NewSndCallBackUPP(callBackProc);
-  
-  aud_chan= (SndChannelPtr)CAlloc(sizeof(*aud_chan));
-  aud_chan->qLength= 128;
-  
-  if (noErr != SndNewChannel(&aud_chan, sampledSynth, initStereo, callback))
-    error("Can't open sound channel (Carbon SndNewChannel())");
-
-  // Main loop of this process
-  while (1) {
-    int a;
-    char *buf, *p, *p1;
-    
-    // Wait for an audio buffer to come free
-    while (1) {
-      for (a= 0; a<BUFFER_COUNT; a++)
-	if (!aud_bufinuse[a]) break;
-      if (a<BUFFER_COUNT) break;
-      
-      // None free -- wait a little while before trying again (1 ==
-      // 1/60 sec according to Apple's on-line docs)
-      Delay(1, 0);
-    }
-    
-    // Read data from the pipe into the buffer
-    buf= aud_buf[a];
-    aud_bufinuse[a]= 1;
-    p1= buf + out_bsiz;
-    p= buf;
-    while (p < p1) {
-      int cnt= read(fd, p, p1-p);
-      if (cnt < 0)
-	error("Sound output complete (%d)", errno);
-      p += cnt;
-    }
-    
-    // Prepare header and send sound commands
-    {
-      CmpSoundHeader header;
-      SndCommand cmd; 
-      
-      memset(&header, 0, sizeof(header));
-      header.samplePtr= (Ptr)buf;
-      header.numChannels= 2;
-      header.sampleRate= out_rate << 16;
-      header.encode= cmpSH;
-      header.sampleSize= out_mode ? 16 : 8;
-      header.numFrames= out_blen / 2;
-      
-      // Command to output the buffer
-      cmd.cmd= bufferCmd;
-      cmd.param1= 0; 
-      cmd.param2= (long)&header;
-      SndDoCommand(aud_chan, &cmd, 0);
-      //debug("Queue buffer %d", a);
-      
-      // Callback command to clear the flag once the buffer is free for reuse
-      cmd.cmd= callBackCmd;
-      cmd.param1= 0;
-      cmd.param2= a;
-      SndDoCommand(aud_chan, &cmd, 0);
-    }
-  }
-}
-#endif
 
 
 //
@@ -1282,10 +1221,12 @@ setup_device(void) {
   }
 #endif
 #ifdef MAC_AUDIO
-  // Mac Carbon audio for OS X
+  // Mac CoreAudio for OS X
   {
-    int rv;
-    int fd[2];
+    char deviceName[256];
+    OSStatus err;
+    UInt32 propertySize, bufferByteCount;
+    struct AudioStreamBasicDescription streamDesc;
 
     out_bsiz= BUFFER_SIZE;
     out_blen= out_mode ? out_bsiz/2 : out_bsiz;
@@ -1295,24 +1236,66 @@ setup_device(void) {
     out_buf_ms= out_buf_lo >> 16;
     out_buf_lo &= 0xFFFF;
 
-    // Create a pipe, and fork to create the sub-process to do the
-    // actual audio output
-    if (0 != pipe(fd)) error("Pipe failed (%d)", errno);
-    out_fd= fd[1];
+    // N.B.  Both -r and -b flags are totally ignored for CoreAudio --
+    // we just use whatever the default device is set to, and feed it
+    // floats.
+    out_mode= 1;
+    out_fd= -9999;
+
+    // Find default device
+    propertySize= sizeof(aud_dev);
+    if ((err= AudioHardwareGetProperty(kAudioHardwarePropertyDefaultOutputDevice,
+				       &propertySize, &aud_dev)))
+      error("Get default output device failed, status = %d", (int)err);
     
-    rv= fork();
-    if (rv == -1) error("Fork failed (%d)", errno);
-    if (rv == 0) {
-      // Child process (sound output)
-      mac_audio_loop(fd[0]);
-      exit(1);
-    }
-      
+    if (aud_dev == kAudioDeviceUnknown)
+      error("No default audio device found");
+    
+    // Get device name
+    propertySize= sizeof(deviceName);
+    if ((err= AudioDeviceGetProperty(aud_dev, 1, 0,
+				     kAudioDevicePropertyDeviceName,
+				     &propertySize, deviceName)))
+      error("Get audio device name failed, status = %d", (int)err);
+    
+    // Get device properties
+    propertySize= sizeof(streamDesc);
+    if ((err= AudioDeviceGetProperty(aud_dev, 1, 0,
+				     kAudioDevicePropertyStreamFormat,
+				     &propertySize, &streamDesc))) 
+      error("Get audio device properties failed, status = %d", (int)err);
+
+    out_rate= (int)streamDesc.mSampleRate;
+
+    if (streamDesc.mChannelsPerFrame != 2) 
+      error("SBaGen requires a stereo output device -- \n"
+	    "default output has %d channels",
+	    streamDesc.mChannelsPerFrame);
+
+    if (streamDesc.mFormatID != kAudioFormatLinearPCM ||
+	!(streamDesc.mFormatFlags & kLinearPCMFormatFlagIsFloat)) 
+      error("Expecting a 32-bit float linear PCM output stream -- \n"
+	    "default output uses another format");
+
+    // Set buffer size
+    bufferByteCount= BUFFER_SIZE / 2 * sizeof(float);
+    propertySize= sizeof(bufferByteCount);
+    if ((err= AudioDeviceSetProperty(aud_dev, 0, 0, 0,
+				     kAudioDevicePropertyBufferSize,
+				     propertySize, &bufferByteCount))) 
+      error("Set audio output buffer size failed, status = %d", (int)err);
+
+    // Setup callback and start it
+    err= AudioDeviceAddIOProc(aud_dev, mac_callback, (void *)1);
+    err= AudioDeviceStart(aud_dev, mac_callback);
+
+    // Report settings      
     if (!opt_Q)
       fprintf(stderr,
-	      "Outputting %d-bit audio at %d Hz with %d %d-sample fragments, "
-	      "%d ms per fragment\n", out_mode ? 16 : 8,
-	      out_rate, BUFFER_COUNT, out_blen/2, out_buf_ms);
+	      "Outputting %d-bit audio at %d Hz to \"%s\",\n"
+	      "  using %d %d-sample fragments, %d ms per fragment\n",
+	      (int)streamDesc.mBitsPerChannel, out_rate, deviceName,
+	      BUFFER_COUNT, out_blen/2, out_buf_ms);
   }
 #endif
 #ifdef NO_AUDIO
@@ -1361,9 +1344,29 @@ int debug_win32_buffer_status() {
 //
 
 #ifdef MAC_AUDIO
-void
-callBackProc(SndChannel *chan, SndCommand *cmd) {
-   aud_bufinuse[cmd->param2]= 0;
+OSStatus mac_callback(AudioDeviceID inDevice,
+		      const AudioTimeStamp *inNow,
+		      const AudioBufferList *inInputData,
+		      const AudioTimeStamp *inInputTime,
+		      AudioBufferList *outOutputData,
+		      const AudioTimeStamp *inOutputTime,
+		      void *inClientData) 
+{
+  float *fp= outOutputData->mBuffers[0].mData;
+  int cnt= BUFFER_SIZE / 2;
+  short *sp;
+
+  if (aud_rd == aud_wr) {
+    // Nothing in buffer list, so fill with silence
+    while (cnt-- > 0) *fp++= 0.0;
+  } else {
+    // Consume a buffer
+    sp= (short*)aud_buf[aud_rd];
+    while (cnt-- > 0) *fp++= *sp++ * (1/32768.0);
+    aud_rd= (aud_rd + 1) % BUFFER_COUNT;
+  }
+  
+  return kAudioHardwareNoError;
 }
 #endif
 

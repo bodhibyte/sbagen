@@ -192,7 +192,7 @@ Installation for Mac OS X users
 -------------------------------
 
 SBaGen was originally written as a UNIX tool, and it was adapted to
-Mac OS X by using Carbon for audio output.  For this reason it is
+Mac OS X by using CoreAudio for audio output.  For this reason it is
 distributed as a TGZ archive, and it uses the text-mode OS X
 'Terminal' application as its user interface.
 
@@ -266,16 +266,9 @@ Remember that most non-interactive UNIX commands (including SBaGen)
 and some interactive ones can be aborted using ^C (Ctrl-C).  This is
 the best way to stop SBaGen once it is running.
 
-For some reason to do with Carbon on OS X, the audio takes a couple of
-seconds to start up every time you run the utility.  I don't know of
-any way to improve this situation on Mac OS X.  It might be something
-that will improve with later versions of Carbon/OSX, or maybe there is
-a work-around I should know about.  If you have the skills or
-knowledge to fix this, let me know.
-
-Also, on Mac OS X, you will probably want to turn the volume up in the
-System Preferences.  However, if you turn it up *too* high, the audio
-will start to clip and distort (it will sound rougher), so watch out.
+Also, on Mac OS X, you may wish to turn the volume up in the System
+Preferences.  However, if you turn it up *too* high, the audio may
+start to distort (it will sound rougher), so watch out.
 
 
 Invocation (all platforms)

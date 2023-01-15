@@ -36,6 +36,8 @@
 	Added -T option to start playback at a given clock time
 	Cleaned up platform-specific code handling in source
 
+1.0.11	Changed Mac support to use CoreAudio because Carbon calls failed on OS 10.1
+
 TO-DO	Maybe necessary to fix DOS output to pipe to use binary mode ?
 	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down
