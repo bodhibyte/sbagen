@@ -259,6 +259,19 @@ the filename.  For example:
 
 >> cat prog-1 | sbagen -
 
+For those pushing the utility past its design limits, you may wish to
+use the following options: 
+
+`-R rate' specifies the rate at which the sound parameters are
+recalculated in Hz, the default being 10Hz.  10Hz is fine for a slide
+that takes a minute, but if you are doing quick (1 sec) fades in and
+out, you'll need a faster refresh to avoid clicks.
+
+`-F fade_interval' specifies the time in ms over which a fade in or
+out takes place.  This is normally one minute (60000ms), which is fine
+for slowly changing tone-sets, but you may wish to adjust this value
+according to your needs.
+
 
 Sequence-file format
 --------------------

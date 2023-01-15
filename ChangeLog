@@ -25,6 +25,8 @@
 1.0.6	Fixed -q to work correctly in conjunction with -SE
 	Fixed to use binary-mode when outputting files (for DOS)
 
+1.0.7	Added -F and -R options to allow faster changes within the sequence
+
 TO-DO	Maybe necessary to fix DOS output to pipe to use binary mode ?
 	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down
@@ -32,3 +34,4 @@ TO-DO	Maybe necessary to fix DOS output to pipe to use binary mode ?
 	Allow specification of fade-in-out intervals other than 30 secs
 	Open /dev/dsp twice, and set buffers not-too-long and not-too-short
 	Option to output a loop-able file of exactly the right length for -i option
+	Allow keypresses to cause sequence to jump forwards/backwards to marked points

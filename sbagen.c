@@ -17,7 +17,7 @@
 //	If you really don't have a copy of the GNU GPL, I'll send you one.
 //	
 
-#define VERSION "1.0.6"
+#define VERSION "1.0.7"
 
 #ifndef NO_DEV_DSP
 #define DSP		// Define to use /dev/dsp, or comment out if not available
@@ -110,6 +110,10 @@ usage() {
 	"          -o file   Output raw data to the given file instead of /dev/dsp\n"
 	"          -O        Output raw data to the standard output\n"
 	"          -W        Output a WAV-format file instead of raw data\n"
+	"\n"
+	"          -R rate   Select rate in Hz that frequency changes are recalculated\n"
+	"                     (for file/pipe output only, default is 10Hz)\n"
+	"          -F fms    Fade in/out time in ms (default 60000ms, or 1min)\n"
 	);
 }
 
@@ -172,6 +176,8 @@ int out_buf_lo;			// Time to output a buffer-ful, fine-tuning in ms/0x10000
 int out_fd;			// Output file descriptor
 int out_rate= 44100;		// Sample rate
 int out_mode= 1;		// Output mode: 0 unsigned char[2], 1 short[2], 2 swapped short[2]
+int out_prate= 10;		// Rate of parameter change (for file and pipe output only)
+int fade_int= 60000;		// Fade interval (ms)
 FILE *in;			// Input sequence file
 int in_lin;			// Current input line
 char buf[4096];			// Buffer for current line
@@ -271,6 +277,12 @@ main(int argc, char **argv) {
        if (argc-- < 1 || 0 == (val= readTime(*argv, &opt_L)) || 
 	   1 == sscanf(*argv++ + val, " %c", &dmy)) 
 	 usage();
+       break;
+     case 'R':
+       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &out_prate, &dmy)) usage();
+       break;
+     case 'F':
+       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &fade_int, &dmy)) usage();
        break;
      default:
        usage(); break;
@@ -800,7 +812,7 @@ setup_device(void) {
 	error("Can't open \"%s\", errno %d", opt_o, errno);
       out_fd= fileno(out);
     }
-    out_blen= out_rate / 5;		// 10 fragments a second
+    out_blen= out_rate * 2 / out_prate;		// 10 fragments a second by default
     while (out_blen & (out_blen-1)) out_blen &= out_blen-1;		// Make power of two
     out_bsiz= out_blen * (out_mode ? 2 : 1);
     out_bps= out_mode ? 4 : 2;
@@ -1043,8 +1055,8 @@ correctPeriods() {
     do {
       if (pp->fi == -1) {
 	int per= t_per0(pp->tim, pp->nxt->tim);
-	if (per < 60000) {
-	  int adj= (60000 - per) / 2, adj0, adj1;
+	if (per < fade_int) {
+	  int adj= (fade_int - per) / 2, adj0, adj1;
 	  adj0= t_per0(pp->prv->tim, pp->tim);
 	  adj0= (adj < adj0) ? adj : adj0;
 	  adj1= t_per0(pp->nxt->tim, pp->nxt->nxt->tim);
