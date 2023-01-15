@@ -20,6 +20,8 @@
 	Preprocessor lines added to support compilation without direct /dev/dsp output
 	-L option now outputs exactly the right length, with either raw or WAV output
 
+1.0.5	Added code to handle output on non-ANSI terminals when NO_ANSI_TTY is defined
+
 TO-DO	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down
 	Fade between tone-sets according to joystick port input

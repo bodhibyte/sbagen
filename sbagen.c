@@ -17,10 +17,13 @@
 //	If you really don't have a copy of the GNU GPL, I'll send you one.
 //	
 
-#define VERSION "1.0.4"
+#define VERSION "1.0.5"
 
 #ifndef NO_DEV_DSP
 #define DSP		// Define to use /dev/dsp, or comment out if not available
+#endif
+#ifndef NO_ANSI_TTY
+#define ANSI_TTY	// Define to use ANSI sequences to clear/redraw lines
 #endif
 
 #include <stdio.h>
@@ -185,6 +188,7 @@ int fast_tim1= -1;		// Last time mentioned in the sequence file (for -E option)
 int fast_mult= 0;		// 0 to sync to clock (adjusting as necessary), or else sync to
 				//  output rate, with the multiplier indicated
 int byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
+int tty_erase;			// Chars to erase from current line (for ESC[K emulation)
 
 int opt_D;
 int opt_Q;
@@ -305,17 +309,28 @@ void
 status(char *err) {
   int a;
   int nch= N_CH;
-  char *p= buf;
+  char *p= buf, *p0, *p1;
 
   if (opt_Q) return;
 
-  p += sprintf(p, "\033[K  ");
+#ifdef ANSI_TTY
+  if (tty_erase) p += sprintf(p, "\033[K");
+#endif
+
+  p0= p;		// Start of line
+  *p++= ' '; *p++= ' ';
   p += sprintTime(p, now);
   while (nch > 1 && chan[nch-1].v.typ == 0) nch--;
   for (a= 0; a<nch; a++)
     p += sprintVoice(p, &chan[a].v, 0);
   if (err) p += sprintf(p, " %s", err);
+  p1= p;		// End of line
 
+#ifndef ANSI_TTY
+  while (tty_erase > p-p0) *p++= ' ';
+#endif
+
+  tty_erase= p1-p0;		// Characters that will need erasing
   fprintf(stderr, "%s\r", buf);
   fflush(stderr);
 }
@@ -707,7 +722,14 @@ corrVal(int running) {
     t0= per->tim;
     t1= per->nxt->tim;
     if (running) {
-      fprintf(stderr, "\033[K");
+      if (tty_erase) {
+#ifdef ANSI_TTY	
+	fprintf(stderr, "\033[K");
+#else
+	fprintf(stderr, "%*s\r", tty_erase, ""); 
+	tty_erase= 0;
+#endif
+      }
       dispCurrPer(stderr); status(0);
     }
     trigger= 1;		// Trigger bells or whatever

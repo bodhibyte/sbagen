@@ -5,7 +5,7 @@ mk		A short script to build it using GCC
 mk-ansi		A short script to build it on a plain ANSI C compiler
 mk-nodevdsp	A short script to build using GCC when /dev/dsp is not available
 sbagen.txt	Full documentation and release notes
-theory.txt	Some notes from my own experimentation - comments welcome !
+theory*.txt	Some notes from my own experimentation - comments welcome !
 prog-*		Some full (24-hour) example sequences
 t-*		Some quick (immediate) test tone-sets
 
