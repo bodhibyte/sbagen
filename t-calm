@@ -1,0 +1,5 @@
+:
+echo "Delta 1.5 Hz + Theta 6 Hz"
+echo ""
+
+sbagen -i pink/40 100+1.5/20 200+6/30

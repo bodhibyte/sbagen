@@ -1,0 +1,390 @@
+SBaGen - Sequenced BinAural Generator
+-------------------------------------
+
+This is a utility, released under the GPL, that generates pink noise
+and binaural tones (to /dev/dsp) in real-time according to a 24-hour
+programmed sequence read from a file.  It can also be used to play a
+sequence immediately, rather than according to the clock, or even a
+combination of the two.
+
+The original idea was to program a set of tones to play overnight as I
+slept, hoping to improve dreaming, and dream-recall.  This way, I can
+also program a sequence to bring me up into alpha rhythms to have a
+good start to the day (supposedly).  I'm still experimenting with all
+of this, by the way.
+
+Some of the more interesting uses (for me) of binaural tones I've read
+about include: improving dream-recall, entering lucid dreaming,
+facilitating meditation, accessing intuition, exploring consciousness.
+
+USE AND EXPERIMENT AT YOUR OWN RISK !
+
+If you make any changes or improvements to the code, let me know so
+that I can keep a master copy of all the best bits.
+
+Jim Peters, Jan 1999                           <jim@aguazul.demon.co.uk>
+                                        <www.aguazul.demon.co.uk/bagen/>
+
+P.S.  I'm available for freelance work, so if you'd like to pay me to
+make special extensions to this utility, or for any other work, then
+please get in touch.
+
+
+Theory
+------
+
+The basic idea of binaural beats is that by applying slightly
+different frequency sine waves to each ear, a beating affect is
+created in the mind itself, due to the internal wiring of the brain.
+If, in the presence of these tones, you relax and let your mind go,
+your mind will naturally synchronize with the beat frequency.  In this
+way it is possible to accurately get into various brain-states, once
+you know what the frequencies are.
+
+It is also possible to play several different tones together, giving
+several different beat frequencies, and programming quite a complex
+brain-state based on several frequencies (in several different bands).
+These complex mixtures of frequencies are the basis of the Hemi-Sync
+(TM) process from the Monroe Institute <http://www.monroeinstitute.org>.
+
+For the complete theory of binaural beats and how they affect the
+mind, it's best to see the Monroe Institute site, particularly the
+pages at <http://www.monroeinstitute.org/programs/hemi-sync.html>.  I
+know little more about binaural beats than what is explained in these
+pages, so take a look.
+
+I am just starting to experiment with this stuff, and I wrote this
+utility to help me set up sounds and sequences to experiment on
+myself.  If you want to experiment with this, feel free to use my
+utility, but don't blame me if you program it wrong and lose your job
+because you were chilling comfortably in Theta until 11:00am and then
+missed a vital meeting at work, or something like that.
+
+You know what I'm saying - USE AT YOUR OWN RISK !  If a little bit of
+fun/risk puts you off, I believe that The Monroe Institute sells pre-
+packaged tapes (although I've never tried them).
+
+Some more theory.  The oscillations in the brain are split into four
+`bands' according to frequency:
+
+Delta (0.5 to 4 Hz).  This is normally generated in deep sleep, or
+when unconsious.  Those experienced in deep trance states can generate
+these waves whilst remaining conscious.
+
+Theta (4 to 8 Hz).  This is the region between sleep and wakefulness,
+in which *dreaming* and other dream-like (or `hypnagogic') experiences
+occur.  It's that bit just before you actually fall asleep at night,
+or just before you are really awake in the morning.  They say it's in
+this band that the unconscious talks to the conscious mind.  It also
+seems to be connected with psychic or ESP-type functioning.
+
+Alpha (8 to 13 Hz).  This is produced when you are awake and fully
+conscious, but with your awareness focussed inside, such as when
+trying to remember something, or when your eyes are closed.
+
+Beta (13 to 30 Hz).  This is normally generated when you are awake,
+with the attention focussed outside, dealing with the outside world.
+It is also generated when you are solving logical problems, such as
+mental arithmetic.
+
+It is interesting to note that in normal dreams, a combination of
+Theta, Alpha and Beta waves are produced, just as if the person was
+awake.
+
+Anyway, it looks like Theta is the place to be, connected with all
+kinds of ESP functioning, such as direct `knowing', and other such
+stuff.  I'm sure I've been there many times, but I'm looking to
+explore this area much further now using this utility.
+
+References:
+
+My source for a lot of the information on brain waves is the book:
+"How to build a lie detector, brain wave monitor and other secret
+parapsychological electronics projects" by Mike and Ruth Wolverton,
+TAB books, 1981.
+
+I became interested in The Monroe Institute and their activities
+through the writings of Ken Eagle Feather, and from attending one
+course of his.  He talks briefly about Hemi-Sync (TM) in "Tracking
+Freedom", mentioning some of the `Focus Levels' (tone-sets) discovered
+by the Monroe Institute, which include ones related to out-of-body
+experiences and even `other worlds'.  I believe he also talks about
+some of his experiences on Monroe Institute workshops in his first
+book "Travelling with Power", although I've not read it (yet).
+
+
+Building the utility
+--------------------
+
+There is a little script `mk' which compiles the executable with the
+correct options.  This is assuming GCC on Linux-i386.  If you're using
+something else, please check and fiddle as necessary.
+
+At the moment the code only handles output to a stereo /dev/dsp device
+using 16-bit samples, so if you have something else, you will have to
+modify the code yourself, or suggest modifications to me.
+
+Note that other heavy jobs running may take CPU time away from the
+sound-generation, and cause gaps in the output.  You could try
+adjusting priorities with nice and renice to improve the situation.
+
+On my Pentium-75, I can generate output at 44100 Hz on all 8 channels,
+and still only use 66% CPU-time, so even with a very old machine, you
+should be able to get some output, even if this means lowering the
+output rate using the -r option.
+
+
+Invocation
+----------
+ 
+>> sbagen prog-1
+
+This runs the sequence in prog-1, starting playing whatever should be
+playing at the current moment, according to the clock time.  The
+status-line at the bottom of the screen shows the current time, and
+currently-playing tones/noise.  The two lines immediately above show
+the period of the sequence which is being played - these lines scroll
+up the screen as one period moves into the next.
+
+To test a sequence (without waiting the full 24 hours), run with the
+-q option:
+
+>> sbagen -q 480 prog-1
+
+This runs the sequence at 480 times the normal speed.  This is quite
+useful to check that a new sequence is going to do what you expect it
+to do.
+
+To test a particular sound continuously, use the -i immediate option:
+
+>> sbagen -i pink/40 100+1.5/20 200-4/36 400+8/2
+
+This incidentally, is an example of a complex brain-state built from
+pink noise, to which is added three frequencies (1.5Hz, 4Hz and 8Hz)
+each on an independant carrier (100, 200 and 400 Hz), at different
+amplitudes (20, 36 and 2).  This combination is supposedly something
+like "body-asleep, brain-awake", assuming I've reproduced it
+correctly.
+
+To run at a lower output rate, use the -r option before any other
+option.  The tones still come out really well even at 8000Hz, on my
+sound card at least, although the noise suffers.  For example:
+
+>> sbagen -r 8000 -i pink/40 100+1.5/20 200+6/30
+
+
+Sequence-file format
+--------------------
+
+Within the sequence file, blank lines, and any leading/trailing white
+space are ignored.  Comments are introduced with a `#', and extend to
+the end of the line.
+
+There are several types of entries that may appear in the file:
+
+  * Tone-set definition lines
+  * Time-sequence lines
+  * Block definition lines
+
+These are described below.  The example sequence-files are useful to
+see how all these work together.
+
+* The tone-set definition line.  This takes the form of:
+
+    <name>: <tone-spec> <tone-spec> ...
+
+  Examples:
+
+    theta6: pink/40 150+6/30
+    test10: pink/40 100+1.5/30 200-4/27 400+8/1.5
+    all-off: -
+
+  The name starts with a letter, and may continue with letters,
+  numbers, `_' or `-'.  Following the colon is a list of one or more
+  tone-specifications.  There are a maximum of 8 of these.  There are
+  three types:
+
+      -					# Channel not in use
+      pink/<amp>			# Pink noise
+      <carrier><sign><freq>/<amp>	# Binaural tones
+
+  The amplitudes are expressed on a scale 0-100.  The total of all the
+  amplitudes <amp> in a tone-set should not exceed 100, or else there
+  will be distortion on output as the waveforms will be clipped.
+
+  The pink noise is probably not 100% pure pink noise - but it is
+  fairly pink, with everything from rumbling to hissing, and it
+  doesn't have too many noticeable distractions such as repeating
+  cycles or distant melodies or whatever.  If you listen really hard,
+  though, you may be able to hear the fairies playing by the
+  waterfall.
+
+  The binaural tones are based on a carrier frequency (in Hz), which
+  should be in the range 100 to 1000.  Frequencies above 1000-1500 or
+  so are of no use because the brain does not react to higher pitches
+  in the same way (see the Monroe Institute pages).  The actual beat
+  frequency <freq> (which the brain responds to) should be in the
+  range 0.5 to 30 Hz.  This corresponds to the ranges for Delta up to
+  Beta as described above.
+
+  The two tones generated are different by <freq>Hz, equally spaced
+  either side of <carrier>.  The <sign> should be + or -, and this
+  decides which channel carries the higher frequency.  I don't think
+  this matters, but in case it does, you can change it here.  So, for
+  example, 100+4/20 generates tones of 102 and 98 Hz, whereas 100-4/20
+  generates tones of 98 and 102 Hz.
+
+  Once a tone-set has been defined, it may be used in time-sequence
+  lines.
+
+* Time-sequence lines.  These take the form of:
+
+    <time-spec> [<fade-in-fade-out>] <tone-set-name> [->]
+    <time-spec> <block-name>
+
+  Examples:
+  
+    16:00 theta6
+    NOW theta6
+    +00:03:30 == theta4 ->
+    NOW+04:00 <> theta4
+    12:00 theta-bursts
+
+  In it's simplest form, this specifies a clock time, and which
+  tone-set should be played at that time.  This tone-set continues
+  until the next clock-time that is specified.
+
+  Time-sequence lines should always appear in order - you will get an
+  error if things appear out of order.
+
+  More complex examples give time relative to the program start time
+  (NOW, or NOW+04:00), or relative to the last absolute time mentioned
+  (+00:03:30).  They also use different varieties of fade-in or
+  fade-out (== or <>), and use `->' to slide to the next time-
+  sequence.  You can also name blocks instead of tone-sets.  These
+  more complex options are described below.
+
+  Take a simple example such as this one:
+  
+    11:00 theta6
+    12:00 alpha8
+    13:00 alpha10
+    14:00 off
+
+  This indicates three tone-sets that will play for an hour each
+  between 11am and 2pm.  The tone-sets do not change suddenly on the
+  hour.  Rather, SBAGEN starts to fade out one tone-set 30 secs before
+  the hour, fading in the next for the first 30 secs of the next hour.
+
+  By default, SBAGEN will attempt to keep common things playing from
+  one tone-set to the next.  So if, for example, all of them use pink
+  noise on the first channel, then this will keep on playing the whole
+  time, whilst the tones that change will fade out and in.
+
+  To change the fading in/out behaviour, include a <fade-in-fade-out>
+  specification before the name.  This consists of two characters, one
+  for fading in this tone-set, the second for fading it out.  The
+  fade-in character may be:
+
+    <      Always fade in from silence.
+
+    -      Fade from previous to this, fading out all tones not
+           continuing, fading in all new tones, and adjusting the
+           amplitude of any tones continuing.
+
+    =      Slide from previous to this, fading out all tones ending,
+           fading in all new tones, and sliding the frequency and
+           adjusting the amplitude of all other tones.
+
+  As an example, using `=' you can smoothly slide from a 4 Hz
+  frequency all the way up to a 12 Hz frequency, rather than fading
+  one out, and fading a new one in.  The fade-out characters are
+  similar, and may be:
+
+    >      Fade out to silence
+    -      Fade to next, as above
+    =      Slide to next, as above
+
+  What fades/slides actually occur between two tone-sets depends on
+  what both of them are asking for.  If one wants to fade out to
+  silence, then the other one can't slide to it.  They both have to
+  want to slide for this to occur.
+
+  The default <fade-in-fade-out> specification is `--', which means
+  keep playing anything that is the same frequency (adjusting the
+  amplitude if necessary), but fade everything else in or out.
+
+  By default fading and sliding only occur during the 60 second period
+  within 30 seconds either side of the change-over time.  However,
+  using `->', the entire period from the start time to the time on the
+  next time-sequence line becomes a transition period.  This way you
+  can have a gentle frequency slide that goes on for an hour, if you
+  like:
+
+    15:00 == theta4 ->
+    16:00 == alpha10
+
+  Assuming these tone-sets do what their names suggest, this will
+  produce a gentle change in binaural beat frequency from 4 Hz up to
+  10 Hz over the hour from 3pm to 4pm.
+
+  The time-specification in its simplest form may be in the form
+  `hh:mm' or `hh:mm:ss'.  This counts as an absolute time.  
+
+  Another form of time-specification is `NOW' which indicates the time
+  at which SBAGEN was started.  This is useful for sequence-files that
+  are intended to play from the time that they are run, rather than
+  always at the same time of day.  `NOW' is another absolute time.
+
+  The other form of time-spec is a relative time, either `+hh:mm' or
+  `+hh:mm:ss'.  This, if used alone, is taken relative to the
+  last-mentioned absolute time, for example the three relative times
+  below are all relative to `NOW', the last-mentioned absolute time:
+
+    NOW+00:10 theta4
+    +00:20    off
+    +00:30    theta4
+    +00:40    off
+
+  Any number of relative times may also be used with an absolute time,
+  to modify it, for example `NOW+04:00+01:12:04' or `12:00+00:00:20'.
+
+* The block definition line.  This introduces a set of lines, and
+  takes the form:
+
+    <block-name>: {
+    <time-sequence-line>
+      ::
+    }
+
+  For example:
+
+    theta-burst: {
+      +00:00 theta4
+      +00:10 off
+    }
+
+  A block definition associates a name with a group of time-sequence
+  lines.  All the time-specs on these lines should be relative,
+  because when the block is called on, all the times will be combined
+  with the time-spec from the calling line.
+
+  For example:
+
+    NOW theta-burst
+
+  expands to:
+
+    NOW+00:00 theta4
+    NOW+00:10 off
+
+  Or for another example:
+
+    +01:00 theta-burst
+
+  expands to:
+
+    +01:00+00:00 theta4
+    +01:00+00:10 off
+
+--------------------------------------------------------------------------------

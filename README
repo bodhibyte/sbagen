@@ -1,0 +1,8 @@
+Here is a brief overview of the files here:
+
+sbagen.cc	The source code
+mk		A short script to build it (linux-i386)
+sbagen.txt	Full documentation and release notes
+prog-*		Some full (24-hour) example sequences
+t-*		Some quick (immediate) test tone-sets
+

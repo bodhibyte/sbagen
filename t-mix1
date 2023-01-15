@@ -1,0 +1,5 @@
+:
+echo "These are 5Hz theta waves, plus a bit of delta at 2.1Hz"
+echo ""
+
+sbagen -i pink/40 100+5/30 200+2.1/5 
