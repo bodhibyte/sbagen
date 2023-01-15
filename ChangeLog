@@ -42,9 +42,13 @@
 	Added mix options: -m and -M
 	New p-drop sequence script
 	
+1.0.13	Increased number of channels to 16 (was 8)
+	For mix-in files ending with .wav/.WAV, correctly skip header
+	
 TO-DO	Maybe necessary to fix DOS output to pipe to use binary mode ?
 	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down
+	Option to randomize the carrier frequencies/phases slightly
 	Fade between tone-sets according to joystick port input
 	Open /dev/dsp twice, and set buffers not-too-long and not-too-short
 	Option to output a loop-able file of exactly the right length for -i option

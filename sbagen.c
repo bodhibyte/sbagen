@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.0.12"
+#define VERSION "1.0.13"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -156,6 +156,7 @@ void writeWAV();
 void writeOut(char *, int);
 void sinc_interpolate(double *, int, int *);
 inline int userTime();
+void find_wav_data_start(FILE *in);
 
 #ifdef WIN_AUDIO
 void CALLBACK win32_audio_callback(HWAVEOUT, UINT, DWORD, DWORD, DWORD);
@@ -208,7 +209,7 @@ usage() {
 #define DEBUG_CHK_UTIME 0	// Check how much user time is being consumed
 #define DEBUG_DUMP_WAVES 0	// Dump out wave tables (to plot with gnuplot)
 #define DEBUG_DUMP_AMP 0	// Dump output amplitude to stdout per chunk
-#define N_CH 8			// Number of channels
+#define N_CH 16			// Number of channels
 
 struct Voice {
   int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin,
@@ -447,14 +448,49 @@ main(int argc, char **argv) {
   if (opt_M)
      mix_in= stdin; 
   if (opt_m) {
+     char *p;
      mix_in= fopen(opt_m, "rb");
      if (!mix_in) error("Can't open -m option mix input file: %s", opt_m);
-     fseek(mix_in, 44, SEEK_SET);	// Skip header on 16-bit stereo WAV files (hack!)
+     p= strchr(opt_m, 0);
+     if (p-opt_m >= 4 && p[-4] == '.' && 
+	 tolower(p[-3]) == 'w' && tolower(p[-2]) == 'a' && tolower(p[-1]) == 'v')
+	find_wav_data_start(mix_in);	// Skip header on WAV files
   }
 
   loop();
   return 0;
 }
+
+//
+//	If this is a WAV file we've been given, skip forward to the
+//	'data' section.  Don't bother checking any of the 'fmt '
+//	stuff.  If they didn't give us a valid 16-bit stereo file at
+//	the right rate, then tough!
+//
+
+void 
+find_wav_data_start(FILE *in) {
+   unsigned char buf[16];
+
+   if (1 != fread(buf, 12, 1, in)) goto bad;
+   if (0 != memcmp(buf, "RIFF", 4)) goto bad;
+   if (0 != memcmp(buf+8, "WAVE", 4)) goto bad;
+   
+   while (1) {
+      int len;
+      if (1 != fread(buf, 8, 1, in)) goto bad;
+      if (0 == memcmp(buf, "data", 4)) return;		// We're in the right place!
+      len= buf[4] + (buf[5]<<8) + (buf[6]<<16) + (buf[7]<<24);
+      if (len & 1) len++;
+      if (0 != fseek(in, len, SEEK_CUR)) goto bad;
+   }
+
+ bad:
+   fprintf(stderr, "WARNING: Not a valid WAV file, treating as RAW\n");
+   rewind(in);
+}
+      
+   
 
 //
 //	Update a status line

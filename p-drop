@@ -2,7 +2,7 @@
 
 sub usage {
     print <<EOT;
-Usage: p-drop <digit><digit>[.<digit>...]<a-l>[s][+][/<amp>] [<sbagen-options>]
+Usage: p-drop <digit><digit>[.<digit>...]<a-l>[s|k][+][/<amp>] [<sbagen-options>]
 
 The first argument gives the 'level' and 'type' of the programme to
 run.  The digits 00 to 99 select the level, based on carrier
@@ -35,6 +35,11 @@ can sometimes give separate 3-minute dream scenes as different
 frequencies are stimulated, which you won't get with sliding tones.
 Since they hold you at a particular frequency, you can potentially go
 deeper into it.
+
+The optional letter 'k' indicates a super-stepped change -- using
+changes at 1 minute intervals instead of 3 minute intervals.  This is
+experimental; it may give a more intense session than the default
+settings.
 
 The optional '+' indicates a 60-minute programme rather than a
 30-minute one.  The extra 30 minutes keeps you at the final beat
@@ -82,14 +87,16 @@ EOT
 #  frequencies in that range might be stimulated during the sessions.
 
 usage() unless (@ARGV);
-usage() unless ($ARGV[0] =~ /^(\d\d(\.\d+)?)([a-zA-Z])(s?)(\+?)(\/([\d.]+))?$/);
+usage() unless ($ARGV[0] =~ /^(\d\d(\.\d+)?)([a-zA-Z])([sk]?)(\+?)(\/([\d.]+))?$/);
 shift;
 
 $carr= 200 - 2 * ($1);
 $bcod= lc($3);
 $slide= $4 eq 's';
+$n_step= ($4 eq 'k') ? 30 : 10;
 $long= $5 eq '+';
 $amp= ($7 eq '') ? 0.5 : $7;
+$stepslide= $n_step > 20 ? 5 : 10;	# Seconds slide between steps
 
 # Carriers
 $len= $long ? 3600 : 1800;
@@ -114,21 +121,21 @@ sub exp_range {
 @beat= ();
 if ($bcod =~ /[a-l]/) {
     @target= qw(4.4 3.7 3.1 2.5 2.0 1.5 1.2 0.9 0.7 0.5 0.4 0.3);
-    @beat= exp_range(10, 10, $target[ord($bcod) - ord('a')]);
+    @beat= exp_range($n_step, 10, $target[ord($bcod) - ord('a')]);
 } else {
     usage();
 }
 $steps= @beat;
 
 if ($slide) {
-    printf "Carrier slides from ${c0}Hz to ${c2}Hz\n";
-    printf "Beat frequency slides from $beat[0]Hz to $beat[$steps-1]Hz\n";
-    printf "\n";
+    printf STDERR "Carrier slides from ${c0}Hz to ${c2}Hz\n";
+    printf STDERR "Beat frequency slides from $beat[0]Hz to $beat[$steps-1]Hz\n";
+    printf STDERR "\n";
 } else {
-    printf "Carrier steps from ${c0}Hz to ${c2}Hz\n";
-    printf "Beat frequency steps from $beat[0]Hz to $beat[$steps-1]Hz:\n";
-    print "  " . join(" ", map { sprintf("%.2f", $_) } @beat) . "\n";
-    printf "\n";
+    printf STDERR "Carrier steps from ${c0}Hz to ${c2}Hz\n";
+    printf STDERR "Beat frequency steps from $beat[0]Hz to $beat[$steps-1]Hz:\n";
+    print STDERR "  " . join(" ", map { sprintf("%.2f", $_) } @beat) . "\n";
+    printf STDERR "\n";
 }
 
 sub fmt {
@@ -169,7 +176,7 @@ if ($slide) {
 			    $c0 + ($c2-$c0) * $tim1/$len,
 			    $beat[$_], $amp);
 	push @out2, sprintf("%s == ts%02d ->", fmt($tim0), $_);
-	push @out2, sprintf("%s == ts%02d ->", fmt($tim1 - 10), $_);
+	push @out2, sprintf("%s == ts%02d ->", fmt($tim1 - $stepslide), $_);
     }
     
     if ($long) {
@@ -180,7 +187,7 @@ if ($slide) {
 				$c0 + ($c2-$c0) * $tim1/$len,
 				$beat[$steps-1], $amp);
 	    push @out2, sprintf("%s == ts%02d ->", fmt($tim0), $_);
-	    push @out2, sprintf("%s == ts%02d ->", fmt($tim1-10), $_);
+	    push @out2, sprintf("%s == ts%02d ->", fmt($tim1 - $stepslide), $_);
 	}
 	push @out2, sprintf("%s == off", fmt($len));
     } else {

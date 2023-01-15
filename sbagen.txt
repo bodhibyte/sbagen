@@ -114,49 +114,6 @@ some of his experiences on Monroe Institute workshops in his first
 book "Travelling with Power", although I've not read it (yet).
 
 
-Installation for Linux and other UNIX users
--------------------------------------------
-
-Download the TGZ and unpack it somewhere.  On Linux, the executable
-can be built using the little 'mk' script:
-
->> ./mk
-
-This script assumes GCC on Linux.  If you're using something else,
-please check the script and adjust it as necessary.  There is also a
-script 'mk-ansi' which strips out non-ANSI C stuff before compiling,
-which may work if you don't have GCC.  A user provided 'mk-netbsd' to
-build on NetBSD.  The other 'mk-*' scripts cover other possibilities
-and other platforms -- see the comments in the files for more details.
-
-On UNIX systems the code handles output to a stereo /dev/dsp device
-using either 16-bit signed or 8-bit unsigned samples.  Hopefully this
-covers almost everybody's sound card, but if you have something else,
-you will either have to modify the code yourself, or suggest
-modifications to me.  You can also output to a file, or to standard
-output, if you wish -- see below.
-
-Note that on low-spec machines, any heavy jobs you have running may
-take CPU time away from the sound-generation, and cause gaps in the
-output.  You can try adjusting priorities with 'nice' and 'renice' to
-improve the situation if you have this problem.
-
-On my old Pentium-75, I could generate 16-bit 44100Hz output on all 8
-channels, and still only use 66% CPU-time, so even with very old
-machines, you should be able to get some output, even if this means
-lowering the output rate using the -r option.
-
-Note that if you don't normally run with '.' in your PATH, you'll
-probably want to install the 'sbagen' binary by copying it to
-/usr/local/bin/.  You'll need to log in as root to do this.
-
-Once built, you can test the utility quickly using some of the t-*
-scripts which generate various different tone-sets.  The prog-* files
-are sequences (see later), and the p-* files are Perl-scripts which
-generate and run sequences.
-
-
-
 Installation for Windows users
 ------------------------------
 
@@ -185,6 +142,51 @@ of tone-set batch files to experiment with, equivalent to the t-*
 scripts on UNIX and Mac OS X.  These also appear in the same directory
 (*.bat), along with the sequence files (prog-*) and other bits and
 pieces.
+
+
+
+Installation for Linux and other UNIX users  
+-------------------------------------------
+
+(Mac users please skip forward to the Mac OS X section below)
+
+Download the TGZ and unpack it somewhere.  On Linux, the executable
+can be built using the little 'mk' script:
+
+>> ./mk
+
+This script assumes GCC on Linux.  If you're using something else,
+please check the script and adjust it as necessary.  There is also a
+script 'mk-ansi' which strips out non-ANSI C stuff before compiling,
+which may work if you don't have GCC.  A user provided 'mk-netbsd' to
+build on NetBSD.  The other 'mk-*' scripts cover other possibilities
+and other platforms -- see the comments in the files for more details.
+
+On UNIX systems the code handles output to a stereo /dev/dsp device
+using either 16-bit signed or 8-bit unsigned samples.  Hopefully this
+covers almost everybody's sound card, but if you have something else,
+you will either have to modify the code yourself, or suggest
+modifications to me.  You can also output to a file, or to standard
+output, if you wish -- see below.
+
+Note that on low-spec machines, any heavy jobs you have running may
+take CPU time away from the sound-generation, and cause gaps in the
+output.  You can try adjusting priorities with 'nice' and 'renice' to
+improve the situation if you have this problem.
+
+On my old Pentium-75, I could generate continuous 16-bit 44100Hz
+output on 8 channels, and still only use 66% CPU-time, so even with
+very old machines, you should be able to get some output, even if this
+means lowering the output rate using the -r option.
+
+Note that if you don't normally run with '.' in your PATH, you'll
+probably want to install the 'sbagen' binary by copying it to
+/usr/local/bin/.  You'll need to log in as root to do this.
+
+Once built, you can test the utility quickly using some of the t-*
+scripts which generate various different tone-sets.  The prog-* files
+are sequences (see later), and the p-* files are Perl-scripts which
+generate and run sequences.
 
 
 
@@ -276,9 +278,9 @@ Invocation (all platforms)
 
 One quick thing to note before we start -- whether you play these
 binaural beats through headphones (as recommended by the Monroe
-Institute), or through speakers (as I've been using them), play them
-at low to medium levels.  My experience is that playing them too loud
-doesn't improve the effect at all -- it just gives me a headache.
+Institute, CenterPointe, etc), or through speakers, play them at low
+to medium levels.  My experience is that playing them too loud doesn't
+improve the effect at all -- it just gives me a headache.
 
 So, here we go.  The following example commands should be typed at the
 shell prompt provided by your operating system, prepared as explained
@@ -467,10 +469,15 @@ Mixing in background sounds
 ---------------------------
 
 There are also two options to allow you to mix in a background
-soundtrack with the binaurals as they are generated.  The soundtrack
-should be either in the form of a raw 16-bit stereo file, or a 16-bit
-stereo WAV file.  By specifying the -m option, the given file is mixed
-with the generated binaural beats:
+soundtrack with the binaurals as they are generated.  This is
+generally regarded as a good idea, and this technique is used by both
+CenterPointe and the Monroe Institute.  The binaural beats are
+generated at a low level (e.g. 200+4/1.0), so that they are only just
+audible.
+
+The soundtrack should be either in the form of a raw 16-bit stereo
+file, or a 16-bit stereo WAV file.  By specifying the -m option, the
+given file is mixed with the generated binaural beats:
 
 >> sbagen -m background.wav -i 200+4/1
 
@@ -480,9 +487,10 @@ mixed with a soundtrack, they are usually kept at a low level (e.g. /1
 above, or even lower).  Note that when the soundtrack file ends,
 sbagen will stop playing.
 
-In fact the -m option only handles raw sound files, but it does skip
-the first 44 bytes of the file so that if you give it a minimal WAV
-file containing 16-bit stereo sounds, it will play it correctly.
+The -m option in fact only handles raw 16-bit sound data, but if you
+give it a filename ending with .wav, it will parse enough of the WAV
+format to skip over any header data correctly.  Don't expect sbagen to
+do any format or sample-rate conversion for you, though!
 
 The -M option allows raw sound data to be passed on the standard
 input.  This is useful in combination with an MP3 player.  For
@@ -530,8 +538,10 @@ useful to see how all these work together.
 
   The name starts with a letter, and may continue with letters,
   numbers, '_' or '-'.  Following the colon is a list of one or more
-  tone-specifications.  There are a maximum of 8 of these.  There are
-  five types:
+  tone-specifications.  There are a maximum of 16 of these.  (This can
+  be adjusted in the source code -- search for N_CH).
+
+  There are five types:
 
       -					# Channel not in use
       pink/<amp>			# Pink noise
