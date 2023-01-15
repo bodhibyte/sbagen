@@ -9,9 +9,9 @@ combination of the two.
 
 The original idea was to program a set of tones to play overnight as I
 slept, hoping to improve dreaming, and dream-recall.  This way, I can
-also program a sequence to bring me up into alpha rhythms to have a
-good start to the day (supposedly).  I'm still experimenting with all
-of this, by the way.
+also program a sequence to bring me up into alpha rhythms to hopefully
+have a good start to the day.  I'm still experimenting with all of
+this, by the way.
 
 Some of the more interesting uses (for me) of binaural tones I've read
 about include: improving dream-recall, entering lucid dreaming,
@@ -23,11 +23,7 @@ If you make any changes or improvements to the code, let me know so
 that I can keep a master copy of all the best bits.
 
 Jim Peters, Jan 1999                           <jim@aguazul.demon.co.uk>
-                                        <www.aguazul.demon.co.uk/bagen/>
-
-P.S.  I'm available for freelance work, so if you'd like to pay me to
-make special extensions to this utility, or for any other work, then
-please get in touch.
+                                 <http://www.aguazul.demon.co.uk/bagen/>
 
 
 Theory
@@ -118,11 +114,13 @@ Building the utility
 
 There is a little script `mk' which compiles the executable with the
 correct options.  This is assuming GCC on Linux-i386.  If you're using
-something else, please check and fiddle as necessary.
+something else, please check and adjust as necessary.
 
-At the moment the code only handles output to a stereo /dev/dsp device
-using 16-bit samples, so if you have something else, you will have to
-modify the code yourself, or suggest modifications to me.
+At the moment the code handles output to a stereo /dev/dsp device
+using either 16-bit signed or 8-bit unsigned samples.  Hopefully this
+covers almost everybody's sound card, but if you have something else,
+you will either have to modify the code yourself, or suggest
+modifications to me.
 
 Note that other heavy jobs running may take CPU time away from the
 sound-generation, and cause gaps in the output.  You could try
@@ -136,6 +134,11 @@ output rate using the -r option.
 
 Invocation
 ----------
+
+>> sbagen
+
+This gives the usage information, showing the version number and the
+full list of options.  Check this for any new features.
  
 >> sbagen prog-1
 
@@ -166,11 +169,16 @@ amplitudes (20, 36 and 2).  This combination is supposedly something
 like "body-asleep, brain-awake", assuming I've reproduced it
 correctly.
 
-To run at a lower output rate, use the -r option before any other
-option.  The tones still come out really well even at 8000Hz, on my
-sound card at least, although the noise suffers.  For example:
+To run at a lower output rate, use the -r option.  The tones still
+come out really well even at 8000Hz, on my sound card at least,
+although the noise suffers.  For example:
 
 >> sbagen -r 8000 -i pink/40 100+1.5/20 200+6/30
+
+If your sound card doesn't support 16-bit output, you'll need to use
+the -b option to select 8-bit output, for example:
+
+>> sbagen -b 8 -i pink/40 100+1.5/20 200+6/30
 
 
 Sequence-file format

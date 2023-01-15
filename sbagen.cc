@@ -3,11 +3,21 @@
 //
 //	(c) 1999 Jim Peters <jim@aguazul.demon.co.uk>.  All Rights Reserved.
 //	For latest version see <http://www.aguazul.demon.co.uk/bagen/>.
-//	Released under the Gnu GPL.  If you don't know what this is, ask me. 
-//	Use at your own risk.
+//	Released under the GNU GPL.  Use at your own risk.
 //
+//	" This program is free software; you can redistribute it and/or modify
+//	  it under the terms of the GNU General Public License as published by
+//	  the Free Software Foundation, version 2.
+//	  
+//	  This program is distributed in the hope that it will be useful,
+//	  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//	  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//	  GNU General Public License for more details. "
+//
+//	If you really don't have a copy of the GNU GPL, I'll send you one.
+//	
 
-#define VERSION "1.0.0"
+#define VERSION "1.0.1"
 
 #include <stdio.h>
 #include <math.h>
@@ -63,13 +73,17 @@ void error(char *fmt, ...) ;
 
 void 
 usage() {
-  error("Usage: sbagen [-r output-rate] [-q mult] seq-file\n"
-	"       sbagen [-r output-rate] -i tone-specs ...\n"
-	"  Options:  -r rate   Select a different output rate from the default (44100 Hz)\n"
-	"            -q mult   Quick.  Run through quickly (real time x `mult') from the\n"
-	"                       start time, rather than wait for real time to pass\n"
-	"            -i        Immediate.  Take the remainder of the command line to be\n"
-	"                       tone-specifications, and play them continuously"
+  error("SBaGen - Sequenced BinAural sound Generator, version " VERSION "\n"
+	"Copyright (c) 1999 Jim Peters, released under the GNU GPL\n\n"
+	"Usage: sbagen [options] seq-file\n"
+	"       sbagen [options] -i tone-specs ...\n\n"
+	"Options:  -v        Display the full interpreted sequence before playing\n"
+	"          -q mult   Quick.  Run through quickly (real time x `mult') from the\n"
+	"                     start time, rather than wait for real time to pass\n"
+	"          -r rate   Manually select the output rate (default is 44100 Hz)\n"
+	"          -b bits   Select the number bits for output (8 or 16, default 16)\n"
+	"          -i        Immediate.  Take the remainder of the command line to be\n"
+	"                     tone-specifications, and play them continuously"
 	);
 }
 
@@ -110,7 +124,6 @@ struct BlockDef {
   char *lin;			// StrDup'd line
 };
 
-int out_rate= 44100;		// Sample rate
 #define ST_AMP 0x7FFFF		// Amplitude of wave in sine-table
 #define NS_ADJ 12		// Noise is generated internally with amplitude ST_AMP<<NS_ADJ
 #define NS_AMP (ST_AMP<<NS_ADJ)
@@ -126,9 +139,11 @@ NameDef *nlist;			// Full list of name definitions
 
 short *out_buf;			// Output buffer
 int out_bsiz;			// Output buffer size (bytes)
-int out_blen;			// Output buffer length (shorts)
+int out_blen;			// Output buffer length (samples)
 int out_buf_ms;			// Time to output a buffer-ful in ms
 int out_fd;			// Output file descriptor
+int out_rate= 44100;		// Sample rate
+int out_mode= 0;		// Output mode: 0 short[2], 1 unsigned char[2]
 FILE *in;			// Input sequence file
 int in_lin;			// Current input line
 char buf[4096];			// Buffer for current line
@@ -141,6 +156,9 @@ int ns_tbl[1<<NS_BIT];
 int ns_off= 0;
 
 int fast_tim0= -1;		// First time mentioned in the sequence file (for -q option)
+
+int opt_v;
+int opt_i;
 
 //
 //	Time-keeping functions
@@ -168,37 +186,47 @@ inline int t_mid(int t0, int t1) {		// Midpoint of period from t0 to t1
 int 
 main(int argc, char **argv) {
   int mult= 0;		// Multiple if going fast
+  int val;
   char dmy;
 
   argc--; argv++;
   init_sin_table();
   setupMidn();
 
-  if (argc < 1) usage();
-
-  if (0 == strcmp(argv[0], "-r")) {
-    argc--; argv++;
-    if (argc < 1 || 1 != sscanf(argv[0], "%d %c", &out_rate, &dmy)) usage();
-    argc--; argv++;
+  // Scan options
+  while (argc > 0 && argv[0][0] == '-') {
+    char *p= 1 + *argv++; argc--;
+    while (*p) switch (*p++) {
+     case 'v': opt_v= 1; break;
+     case 'i': opt_i= 1; break;
+     case 'q': 
+       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &mult, &dmy)) usage();
+       if (mult < 1) mult= 1;
+       break;
+     case 'r':
+       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &out_rate, &dmy)) usage();
+       break;
+     case 'b':
+       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &val, &dmy)) usage();
+       if (val != 8 && val != 16) usage();
+       out_mode= (val == 8) ? 1 : 0;
+       break;
+     default:
+       usage(); break;
+    }
   }
 
-  if (0 == strcmp(argv[0], "-i")) {
+  if (argc < 1) usage();
+
+  if (opt_i) {
     // Immediate mode
     char *p= buf;
     p += sprintf(p, "immediate:");
-    argc--; argv++;
     while (argc-- > 0) p += sprintf(p, " %s", *argv++);
     readSeqImm();
   }
   else {
-    if (0 == strcmp(argv[0], "-q")) {
-      argc--; argv++;
-      if (argc < 1) usage();
-      if (1 != sscanf(argv[0], "%d %c", &mult, &dmy)) usage();
-      argc--; argv++;
-      if (mult < 1) mult= 1;
-    }	
-
+    // Sequenced mode
     if (argc != 1) usage();
     readSeq(argv[0]);
   }
@@ -388,7 +416,7 @@ struct Noise {
 Noise ntbl[NS_BANDS];
 int nt_off;
 
-inline int 
+static inline int 
 noise2() {
   int tot;
   int off= nt_off++;
@@ -442,14 +470,13 @@ noise2() {
 
 void 
 loop(int fast_mult) {	
-  int const CNT= 20;
-  int cnt;
+  int c, cnt;
   int err;		// Error to add to `now' until next cnt==0
   int fast= fast_mult != 0;
   int utime= 0;
 
-  printf("\n");
   setup_device();
+  cnt= 1 + 1999 / out_buf_ms;	// Update every 2 seconds or so
   now= fast ? fast_tim0 : calcNow();
   err= fast ? out_buf_ms * (fast_mult - 1) : 0;
 
@@ -459,12 +486,12 @@ loop(int fast_mult) {
   status(0);
   
   while (1) {
-    for (cnt= 0; cnt < CNT; cnt++) {
+    for (c= 0; c < cnt; c++) {
       corrVal(1);
       outChunk();
       now += out_buf_ms + err;
       if (now > H24) now -= H24;
-      if (fast && (cnt&1)) status(0);
+      if (fast && (c&1)) status(0);
     }
 
     if (!fast) {
@@ -472,7 +499,7 @@ loop(int fast_mult) {
       err= calcNow() - now;		// Make sure that `now' keeps in sync with real
       if (abs(err) > H12) err= 0;	//  clock, but don't go changing it suddenly
       sprintf(buf, "(%d)", err); 
-      err /= CNT;
+      err /= cnt;
 
       if (DEBUG_CHK_UTIME) {
 	int prev= utime;
@@ -488,16 +515,19 @@ loop(int fast_mult) {
 //
 //	Output a chunk of sound (a buffer-ful), then return
 //
+//	Note: Optimised for 16-bit output.  Eight-bit output is
+//	slower, but then it probably won't have to run at as high a
+//	sample rate.
+//
 
 void 
 outChunk() {
   int off= 0;
-  int a;
 
   while (off < out_blen) {
     int ns= noise2();		// Use same pink noise source for everything
     int tot1, tot2;		// Left and right channels
-    int val;
+    int val, a;
     Channel *ch;
 
     tot1= tot2= 0;
@@ -518,9 +548,17 @@ outChunk() {
        tot2 += val;
        break;
     }
-
+    
     out_buf[off++]= tot1 >> 16;
     out_buf[off++]= tot2 >> 16;
+  }
+
+  // Rewrite buffer for 8-bit mode
+  if (out_mode) {
+    short *sp= out_buf;
+    short *end= out_buf + out_blen;
+    char *cp= (char*)out_buf;
+    while (sp < end) *cp++= (*sp++ >> 8) + 128;
   }
 
   if (out_bsiz != write(out_fd, out_buf, out_bsiz)) 
@@ -589,12 +627,20 @@ corrVal(int running) {
 
 void 
 setup_device(void) {
-  int afmt= AFMT_S16_LE, stereo= 1, rate= out_rate;
-  int fragsize= 14, numfrags= 10, enc;
+  int stereo, rate, fragsize, numfrags, enc;
+  int afmt_req, afmt;
   audio_buf_info info;
+  int test= 1;
 
   if (0 > (out_fd= open("/dev/dsp", O_WRONLY)))
     error("Can't open /dev/dsp, errno %d", errno);
+  
+  afmt= afmt_req= (out_mode ? AFMT_U8 : 
+		   ((char*)&test)[0] ? AFMT_S16_LE : AFMT_S16_BE);
+  stereo= 1;
+  rate= out_rate;
+  fragsize= 14;
+  numfrags= 4;	
 
   enc= (numfrags<<16) | fragsize;
 
@@ -604,21 +650,22 @@ setup_device(void) {
       0 > ioctl(out_fd, SNDCTL_DSP_SPEED, &rate))
     error("Can't configure /dev/dsp, errno %d", errno);
 
+  if (afmt != afmt_req) 
+    error("Can't open device in %d-bit mode", out_mode ? 8 : 16);
   if (!stereo)
     error("Can't open device in stereo");
-  if (afmt != AFMT_S16_LE)
-    error("Can't open device in 16-bit");
+    
   out_rate= rate;
 
   if (-1 == ioctl(out_fd, SNDCTL_DSP_GETOSPACE, &info))
     error("Can't get audio buffer info, errno %d", errno);
   out_bsiz= info.fragsize;
-  out_blen= out_bsiz / 2;
-  out_buf= (short*)CAlloc(out_bsiz);
+  out_blen= out_mode ? out_bsiz : out_bsiz / 2;
+  out_buf= (short*)CAlloc(out_blen * sizeof(short));
   out_buf_ms= (int)(1000.0 * 0.5 * out_blen / out_rate);
 
-  printf("Outputting audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
-	 out_rate, info.fragstotal, out_bsiz/4, out_buf_ms);
+  printf("Outputting %d-bit audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
+	 out_mode ? 8 : 16, out_rate, info.fragstotal, out_blen/2, out_buf_ms);
 }
 
 //
@@ -907,7 +954,7 @@ correctPeriods() {
   }
 
   // Print the whole lot out
-  {
+  if (opt_v) {
     Period *pp;
     if (per->nxt != per)
       while (per->prv->tim < per->tim) per= per->nxt;
@@ -917,6 +964,7 @@ correctPeriods() {
       dispCurrPer();
       per= per->nxt;
     } while (per != pp);
+    printf("\n");
   }  
 }
 
