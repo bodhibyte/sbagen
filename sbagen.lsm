@@ -1,0 +1,25 @@
+Begin3
+Title:          SBaGen - Binaural Brain Wave Experimenter's Lab
+Version:        1.0.6
+Entered-date:   23MAY99
+Description:    This is SBaGen, a Binaural Brain-Wave Experimenters' Lab.
+
+		The utility generates pink noise and binaural tones in
+		real-time according to a 24-hour programmed sequence
+		read from a file.  WAV-file output is also possible.
+		It is ideal for anyone who wishes to experiment with
+		binaural beats for themselves, without using the
+		commercially available tapes or courses.  For more
+		theory about binaural beats and how they affect the
+		mind, see the included documentation.
+
+Keywords:       binaural brain wave mind meditation lucid dreaming monroe
+Author:         jim@aguazul.demon.co.uk (Jim Peters)
+Maintained-by:  jim@aguazul.demon.co.uk (Jim Peters)
+Primary-site:   sunsite.unc.edu /pub/Linux/apps/sound/players
+		29k  sbagen-1.0.6.tgz
+		1k   sbagen.lsm
+Alternate-site:	http://www.aguazul.demon.co.uk/bagen/
+Platforms:      Linux
+Copying-policy: GPL 2.0
+End
