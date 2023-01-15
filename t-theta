@@ -1,4 +1,0 @@
-:
-echo "Theta 6 Hz"
-echo ""
-sbagen $* -i pink/40 150+6/15

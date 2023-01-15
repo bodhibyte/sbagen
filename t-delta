@@ -1,4 +1,0 @@
-:
-echo "Delta 2 Hz"
-echo ""
-sbagen $* -i pink/40 150+2/15

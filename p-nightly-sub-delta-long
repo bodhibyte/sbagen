@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+# This version holds the tones for longer than the normal version --
+# 25 minutes on and 5 minutes off, compared to 5:5 for the normal
+# version.
+
 # Enter wake-up hour as hh or hh:mm as first argument, if required
 
 $tar= 7;	# 7am
@@ -40,8 +44,12 @@ while (1) {
     $dmy= rand;
     push @ts, sprintf "t%02d: %.2f+%5.3f/40 %.2f+4.2/10\n", $cnt, $cc, $bb, $cc * 2;
     push @tl, sprintf "%02d:%02d t%02d\n", $hh, $mm, $cnt;
-    push @tl, sprintf "%02d:%02d off\n", $hh, $mm+5;
-    $cnt++;
+    push @tl, sprintf "%02d:%02d off\n", $hh, $mm+25;
+    $cnt+=3;
+
+    # Alternative version for 15 minutes on, 5 minutes off:
+    #    push @tl, sprintf "%02d:%02d off\n", $hh, $mm+15;
+    #    $cnt+=2;
 }
 
 die unless open OUT, ">tmp-prog";

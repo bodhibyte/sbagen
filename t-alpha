@@ -1,4 +1,0 @@
-:
-echo "Alpha 10 Hz"
-echo ""
-sbagen $* -i pink/40 300+10/10
