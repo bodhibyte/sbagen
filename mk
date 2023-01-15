@@ -1,11 +1,11 @@
 #!/bin/bash
 
-#       Building on Linux.  Note: only compiles in OGG and MP3 support
-#       if the libraries are already setup within libs/, otherwise
-#       omits them.  To build the libraries, see the 'mk-libmad-linux'
-#       and 'mk-tremor-linux' scripts.
+#       Building 32-bit executable on Linux.  Note: only compiles in
+#       OGG and MP3 support if the libraries are already setup within
+#       libs/, otherwise omits them.  To build the libraries, see the
+#       'mk-libmad-linux' and 'mk-tremor-linux' scripts.
 
-OPT='-DT_LINUX -Wall -O3 -s -lm -lpthread'
+OPT='-DT_LINUX -Wall -m32 -O3 -s -lm -lpthread'
 LIBS=''
 
 [ -f libs/linux-libmad.a ] && {

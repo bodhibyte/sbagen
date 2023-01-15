@@ -1,7 +1,7 @@
 //
 //	SBaGen - Sequenced Binaural Beat Generator
 //
-//	(c) 1999-2007 Jim Peters <jim@uazu.net>.  All Rights Reserved.
+//	(c) 1999-2011 Jim Peters <jim@uazu.net>.  All Rights Reserved.
 //	For latest version see http://sbagen.sf.net/ or
 //	http://uazu.net/sbagen/.  Released under the GNU GPL version 2.
 //	Use at your own risk.
@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.4.4"
+#define VERSION "1.4.5"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -237,7 +237,7 @@ OSStatus mac_callback(AudioDeviceID, const AudioTimeStamp *, const AudioBufferLi
 void 
 help() {
    printf("SBaGen - Sequenced Binaural Beat Generator, version " VERSION 
-	  NL "Copyright (c) 1999-2007 Jim Peters, http://uazu.net/, all rights "
+	  NL "Copyright (c) 1999-2011 Jim Peters, http://uazu.net/, all rights "
 	  NL "  reserved, released under the GNU GPL v2.  See file COPYING."
 	  NL 
 	  NL "Usage: sbagen [options] seq-file ..."
@@ -296,7 +296,7 @@ help() {
 void 
 usage() {
   error("SBaGen - Sequenced Binaural Beat Generator, version " VERSION 
-	NL "Copyright (c) 1999-2007 Jim Peters, http://uazu.net/, all rights "
+	NL "Copyright (c) 1999-2011 Jim Peters, http://uazu.net/, all rights "
 	NL "  reserved, released under the GNU GPL v2.  See file COPYING."
 	NL 
 	NL "Usage: sbagen [options] seq-file ..."

@@ -1,3 +1,5 @@
+1.4.5   Update Mac OSX build to use Intel 32-bit
+
 1.4.4   Fixes to support sound output on Vista
 	Make "Edit sequence" work on WinXP
 	Default to 60-minutes for WAV-output if a length can't be established

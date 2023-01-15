@@ -9,24 +9,25 @@
 #       './configure' instead.  Also it might be necessary to run
 #       'ranlib' on the resulting .a files.
 
-CFLAGS="-DT_MACOSX -I/System/Library/Frameworks/Carbon.framework/Headers -fpascal-strings"
+CFLAGS="-m32 -mmacosx-version-min=10.4 -DT_MACOSX"
+CFLAGS="$CFLAGS -I/System/Library/Frameworks/Carbon.framework/Headers -fpascal-strings"
 LIBS="-framework Carbon -framework CoreAudio"
 
-xx=libs/macosx-libmad.a
+xx=libs/macosx-intel32-libmad.a
 [ -f $xx ] && {
     CFLAGS="-DMP3_DECODE $CFLAGS"
     LIBS="$LIBS $xx"
     ranlib $xx	# OSX is fussy if you copy .a files and insists you run 'ranlib' on them
 }
 
-xx=libs/macosx-libvorbisidec.a
+xx=libs/macosx-intel32-libvorbisidec.a
 [ -f $xx ] && {
     CFLAGS="-DOGG_DECODE $CFLAGS"
     LIBS="$LIBS $xx"
     ranlib $xx	# OSX is fussy if you copy .a files and insists you run 'ranlib' on them
 }
 
-CC="cc $CFLAGS -Wall -O3 -s $LIBS -lm -lpthread"
+CC="cc $CFLAGS -Wall -O3 $LIBS -lm -lpthread"
 
 $CC sbagen.c -o sbagen || exit 1
-
+strip sbagen || exit 1
