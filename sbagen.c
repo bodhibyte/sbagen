@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.0.11"
+#define VERSION "1.0.12"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -179,8 +179,10 @@ usage() {
 	"          -q mult   Quick.  Run through quickly (real time x `mult') from the\n"
 	"                     start time, rather than wait for real time to pass\n"
 	"\n"
+#ifndef MAC_AUDIO
 	"          -r rate   Manually select the output rate (default is 44100 Hz)\n"
 	"          -b bits   Select the number bits for output (8 or 16, default 16)\n"
+#endif
 	"          -L time   Select the length of time (hh:mm or hh:mm:ss) to output\n"
 	"                     for.  Default is to output forever.\n"
 	"          -S        Output from the first tone-set in the sequence (Start),\n"
@@ -192,6 +194,10 @@ usage() {
 	"          -o file   Output raw data to the given file instead of /dev/dsp\n"
 	"          -O        Output raw data to the standard output\n"
 	"          -W        Output a WAV-format file instead of raw data\n"
+	"          -m file   Read raw audio data from the given file and mix it with\n"
+	"                      the generated binaural beats\n"
+	"          -M        Read raw audio data from the standard input and mix it\n"
+	"                      with the generated binaural beats\n"
 	"\n"
 	"          -R rate   Select rate in Hz that frequency changes are recalculated\n"
 	"                     (for file/pipe output only, default is 10Hz)\n"
@@ -285,6 +291,7 @@ int byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
 int tty_erase;			// Chars to erase from current line (for ESC[K emulation)
 
 int opt_D;
+int opt_M;
 int opt_Q;
 int opt_i;
 int opt_S;
@@ -294,6 +301,10 @@ int opt_O;
 int opt_L= -1;			// Length in ms, or -1
 int opt_T= -1;			// Start time in ms, or -1
 char *opt_o;			// File name to output to, or 0
+char *opt_m;			// File name to read mix data from, or 0
+
+FILE *mix_in;			// Input stream for mix sound data
+int bigendian;			// Is this platform Big-endian?
 
 #ifdef WIN_AUDIO
  #define BUFFER_COUNT 8
@@ -341,10 +352,12 @@ int
 main(int argc, char **argv) {
   int val;
   char dmy;
+  short test= 0x1100;
 
   argc--; argv++;
   init_sin_table();
   setupMidnight();
+  bigendian= ((char*)&test)[0] != 0;
 
   // Scan options
   while (argc > 0 && argv[0][0] == '-' && argv[0][1]) {
@@ -354,6 +367,11 @@ main(int argc, char **argv) {
      case 'Q': opt_Q= 1; break;
      case 'i': opt_i= 1; break;
      case 'E': opt_E= 1; break;
+     case 'M': opt_M= 1; break;
+     case 'm':
+       if (argc-- < 1) usage();
+       opt_m= *argv++;
+       break;
      case 'S': opt_S= 1;
        if (!fast_mult) fast_mult= 1; 		// Don't try to sync with real time
        break;
@@ -368,6 +386,7 @@ main(int argc, char **argv) {
        if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &fast_mult, &dmy)) usage();
        if (fast_mult < 1) fast_mult= 1;
        break;
+#ifndef MAC_AUDIO
      case 'r':
        if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &out_rate, &dmy)) usage();
        break;
@@ -376,6 +395,7 @@ main(int argc, char **argv) {
        if (val != 8 && val != 16) usage();
        out_mode= (val == 8) ? 0 : 1;
        break;
+#endif
      case 'o':
        if (argc-- < 1) usage();
        opt_o= *argv++;
@@ -421,6 +441,15 @@ main(int argc, char **argv) {
     // Sequenced mode
     if (argc != 1) usage();
     readSeq(argv[0]);
+  }
+  
+  mix_in= 0;
+  if (opt_M)
+     mix_in= stdin; 
+  if (opt_m) {
+     mix_in= fopen(opt_m, "rb");
+     if (!mix_in) error("Can't open -m option mix input file: %s", opt_m);
+     fseek(mix_in, 44, SEEK_SET);	// Skip header on 16-bit stereo WAV files (hack!)
   }
 
   loop();
@@ -777,6 +806,27 @@ loop() {
 void 
 outChunk() {
    int off= 0;
+
+   if (mix_in) {
+      if (1 != fread(out_buf, out_bsiz, 1, mix_in)) {
+	 if (feof(mix_in)) { 
+	    fprintf(stderr, "End of mix input audio stream\n");
+	    exit(0);
+	 }
+	 error("Mix input data read error");
+      }
+      
+      // Swap bytes if bigendian
+      if (bigendian) {
+	 int a;
+	 char *buf= (char*)out_buf;
+	 for (a= 0; a<out_bsiz; a+=2) {
+	    char tmp= buf[a];
+	    buf[a]= buf[a+1];
+	    buf[a+1]= tmp;
+	 }
+      }
+   }
    
    while (off < out_blen) {
       int ns= noise2();		// Use same pink noise source for everything
@@ -784,7 +834,7 @@ outChunk() {
       int val, a;
       Channel *ch;
       int *tab;
-      
+
       tot1= tot2= 0;
       
       ch= &chan[0];
@@ -833,9 +883,14 @@ outChunk() {
 	  tot2 += ch->amp * tab[ch->off2 >> 16];
 	  break;
       }
-      
-      out_buf[off++]= tot1 >> 16;
-      out_buf[off++]= tot2 >> 16;
+
+      if (mix_in) {
+	 out_buf[off++] += tot1 >> 16;
+	 out_buf[off++] += tot2 >> 16;
+      } else {
+	 out_buf[off++]= tot1 >> 16;
+	 out_buf[off++]= tot2 >> 16;
+      }
   }
 
   // Generate debugging amplitude output
@@ -1325,7 +1380,7 @@ win32_audio_callback(HWAVEOUT hand, UINT uMsg,
    }
 }
 
-int debug_win32_buffer_status() {
+void debug_win32_buffer_status() {
    char tmp[80];
    char *p= tmp;
    int a;
@@ -1394,10 +1449,8 @@ writeWAV() {
   addU4(byte_count);
   writeOut(buf, 44);
 
-  if (out_mode == 1) {
-    short test= 0x0011;
-    if (!*(char*)&test) out_mode= 2;		// Turn on byte-swapping
-  }
+  if (out_mode == 1 && bigendian) 
+     out_mode= 2;		// Turn on byte-swapping
 
   if (!opt_Q)
     fprintf(stderr, 

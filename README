@@ -6,9 +6,10 @@ sbagen		The Mac OS X executable (Mac distribution only)
 
 prog-*		Some full (24-hour) example sequences
 t-*		Some quick (immediate) test tone-set scripts
-p-*		A couple of Perl-scripts that generate and run sequences
+p-*		Some Perl-scripts that generate and run sequences
 focus.txt	Some notes on the scripts that were derived from reported 
 		 Monroe Institute focus levels
+holosync.txt	Some notes on the CenterPointe Holosync techniques
 theory*.txt	Some notes from my own experimentation
 
 sbagen.c	The source code

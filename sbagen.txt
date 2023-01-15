@@ -125,9 +125,9 @@ can be built using the little 'mk' script:
 This script assumes GCC on Linux.  If you're using something else,
 please check the script and adjust it as necessary.  There is also a
 script 'mk-ansi' which strips out non-ANSI C stuff before compiling,
-which may work if you don't have GCC.  The other 'mk-*' scripts cover
-other possibilities and other platforms -- see the comments in the
-files for more details.
+which may work if you don't have GCC.  A user provided 'mk-netbsd' to
+build on NetBSD.  The other 'mk-*' scripts cover other possibilities
+and other platforms -- see the comments in the files for more details.
 
 On UNIX systems the code handles output to a stereo /dev/dsp device
 using either 16-bit signed or 8-bit unsigned samples.  Hopefully this
@@ -213,11 +213,11 @@ home directory, and moves into that directory.  You can type 'l' or
 
 You also need to make sure that '.' (the current directory) is in your
 $PATH.  On 10.0 at least, it doesn't seem to be set up by default.  If
-you are running csh (which is the default), type this:
+you are running csh (which is the default in 10.0 and 10.1), type this:
 
 >> setenv PATH "${PATH}:."
 
-If you have changed your settings and you are running zsh, type this:
+If you are running zsh or bash, however, type this:
 
 >> export PATH="$PATH:."
 
@@ -462,6 +462,37 @@ out takes place.  This is normally one minute (60000ms), which is fine
 for slowly changing tone-sets, but you may wish to adjust this value
 according to your needs.
 
+
+Mixing in background sounds
+---------------------------
+
+There are also two options to allow you to mix in a background
+soundtrack with the binaurals as they are generated.  The soundtrack
+should be either in the form of a raw 16-bit stereo file, or a 16-bit
+stereo WAV file.  By specifying the -m option, the given file is mixed
+with the generated binaural beats:
+
+>> sbagen -m background.wav -i 200+4/1
+
+Note that if the background sounds are too loud, then the addition of
+the binaurals might cause clipping.  However, when binaural beats are
+mixed with a soundtrack, they are usually kept at a low level (e.g. /1
+above, or even lower).  Note that when the soundtrack file ends,
+sbagen will stop playing.
+
+In fact the -m option only handles raw sound files, but it does skip
+the first 44 bytes of the file so that if you give it a minimal WAV
+file containing 16-bit stereo sounds, it will play it correctly.
+
+The -M option allows raw sound data to be passed on the standard
+input.  This is useful in combination with an MP3 player.  For
+example, using 'splay' on UNIX, you can use an MP3 to provide the
+background sounds as follows, for example:
+
+>> splay -d - background.mp3 | sbagen -M -i 200+4/1
+
+This has the advantage of not requiring a huge WAV file to be stored
+on your disk.
 
 
 Sequence-file format

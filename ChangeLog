@@ -38,6 +38,10 @@
 
 1.0.11	Changed Mac support to use CoreAudio because Carbon calls failed on OS 10.1
 
+1.0.12	NetBSD script added
+	Added mix options: -m and -M
+	New p-drop sequence script
+	
 TO-DO	Maybe necessary to fix DOS output to pipe to use binary mode ?
 	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down
