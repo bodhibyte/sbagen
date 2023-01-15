@@ -1,3 +1,7 @@
+1.4.2	Handles playing sequences to the clock across a daylight savings time change
+	Improved Linux /dev/dsp initialisation to get a good fragment size
+	Fixed OGG setup bug that affected some Linux systems when playing river sounds
+
 1.4.1	Added wakeup option to -p drop
 	Permitted duration of -p drop session to be modified
 	Added ReplayGain handling for OGG files

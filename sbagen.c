@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.4.1"
+#define VERSION "1.4.2"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -193,7 +193,6 @@ void correctPeriods();
 void setup_device(void) ;
 void readNameDef();
 void readTimeLine();
-void setupMidnight();
 int voicesEq(Voice *, Voice *);
 void error(char *fmt, ...) ;
 int sprintTime(char *, int);
@@ -307,16 +306,16 @@ usage() {
 #ifdef EXIT_KEY
 	NL
 	NL "Windows users please note that this utility is designed to be run as the"
-	NL "associated application for SBG files.  To set this up, double-click on a SBG"
-	NL "file then 'Browse...' to select SBAGEN.EXE as the associated application.  You"
-	NL "can then run all the SBG files directly from the desktop and you can edit them"
-	NL "using NotePad.  Alternatively, SBaGen may be run from the MS-DOS prompt, or"
-	NL "from BAT files.  SBaGen is powerful software -- it is worth the effort of"
-	NL "figuring all this out.  See SBAGEN.TXT for the full documentation."
+	NL "associated application for SBG files.  This should have been set up for you by"
+	NL "the installer.  You can run all the SBG files directly from the desktop by"
+	NL "double-clicking on them, and edit them using NotePad from the right-click menu."
+	NL "Alternatively, SBaGen may be run from the MS-DOS prompt (CMD on WinXP), or from"
+	NL "BAT files.  SBaGen is powerful software -- it is worth the effort of figuring"
+	NL "all this out.  See SBAGEN.TXT for the full documentation."
 	NL
-	NL "Editing the SBG files gives you access to the full power of SBaGen, but if you"
-	NL "want a simple GUI interface to the basic features, you could look at a"
-	NL "user-contributed tool called SBaGUI:"
+	NL "Editing the SBG files gives you access to the full tweakable power of SBaGen, "
+	NL "but if you want a simple GUI interface to the most basic features, you could "
+	NL "look at a user-contributed tool called SBaGUI:"
 	NL
 	NL "  http://sbagen.opensrc.org/wiki.php?page=SBaGUI"
 #endif
@@ -331,7 +330,7 @@ usage() {
 
 struct Voice {
   int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin,
-   				//   5 mix, -1 to -100 wave00 to wave99
+   				//   5 mix, 6 mixspin, 7 mixbeat, -1 to -100 wave00 to wave99
   double amp;			// Amplitude level (0-4096 for 0-100%)
   double carr;			// Carrier freq (for binaural/bell), width (for spin)
   double res;			// Resonance freq (-ve or +ve) (for binaural/spin)
@@ -340,7 +339,7 @@ struct Voice {
 struct Channel {
   Voice v;			// Current voice setting (updated from current period)
   int typ;			// Current type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin,
-   				//   5 mix, -1 to -100 wave00 to wave99
+   				//   5 mix, 6 mixspin, 7 mixbeat, -1 to -100 wave00 to wave99
   int amp, amp2;		// Current state, according to current type
   int inc1, off1;		//  ::  (for binaural tones, offset + increment into sine 
   int inc2, off2;		//  ::   table * 65536)
@@ -656,7 +655,6 @@ main(int argc, char **argv) {
 
    argc--; argv++;
    init_sin_table();
-   setupMidnight();
    bigendian= ((char*)&test)[0] != 0;
    
    // Process all the options
@@ -1176,31 +1174,36 @@ StrDup(char *str) {
 }
 
 #ifdef UNIX_TIME
-// Precalculate midnight to accelerate calcNow()
-static int time_midnight;
+// Precalculate a reference timestamp to accelerate calcNow().  This
+// can be any recent time.  We recalculate it every 10 minutes.  The
+// only reason for doing this is to cope with clocks going forwards or
+// backwards when entering or leaving summer time so that people wake
+// up on time on these two dates; an hour of the sequence will be
+// repeated or skipped.  The 'time_ref*' variables will be initialised
+// on the first call to calcNow().
+
+static int time_ref_epoch= 0;	// Reference time compared to UNIX epoch
+static int time_ref_ms;		// Reference time in sbagen 24-hour milliseconds
 
 void 
-setupMidnight() {
+setupRefTime() {
   struct tm *tt;
   time_t tim= time(0);
   tt= localtime(&tim);
-  tt->tm_sec= 0;
-  tt->tm_min= 0;
-  tt->tm_hour= 0;
-  time_midnight= mktime(tt);
+  time_ref_epoch= tim;
+  time_ref_ms= 1000*tt->tm_sec + 60000*tt->tm_min + 3600000*tt->tm_hour;
 }  
 
 inline int  
 calcNow() {
   struct timeval tv;
   if (0 != gettimeofday(&tv, 0)) error("Can't get current time");
-  return ((tv.tv_sec - time_midnight) * 1000 + tv.tv_usec / 1000) % H24;
+  if (tv.tv_sec - time_ref_epoch > 600) setupRefTime();
+  return (time_ref_ms + (tv.tv_sec - time_ref_epoch) * 1000 + tv.tv_usec / 1000) % H24;
 }
 #endif
 
 #ifdef WIN_TIME
-void setupMidnight() { }
-
 inline int  
 calcNow() {
   SYSTEMTIME st;
@@ -1829,36 +1832,55 @@ setup_device(void) {
   // Normal /dev/dsp output
   {
     int stereo, rate, fragsize, numfrags, enc;
+    int targ_ms= 400;	// How much buffering we want, ideally
     int afmt_req, afmt;
     int test= 1;
     audio_buf_info info;
-    if (0 > (out_fd= open(opt_d, O_WRONLY)))
-      error("Can't open %s, errno %d", opt_d, errno);
+    int retry= 0;
+
+    fragsize= 14;  // Ask for fragments of 2^14 == 16384 bytes == 4096 samples
+
+    while (1) {
+       if (0 > (out_fd= open(opt_d, O_WRONLY)))
+	  error("Can't open %s, errno %d", opt_d, errno);
+       
+       afmt= afmt_req= ((out_mode == 0) ? AFMT_U8 : 
+			((char*)&test)[0] ? AFMT_S16_LE : AFMT_S16_BE);
+       stereo= 1;
+       rate= out_rate;
+       numfrags= (out_rate * 4 * targ_ms / 1000) >> fragsize;
+       if (numfrags < 1) numfrags= 1;
+       enc= (numfrags<<16) | fragsize;
+       
+       if (0 > ioctl(out_fd, SNDCTL_DSP_SETFRAGMENT, &enc) ||
+	   0 > ioctl(out_fd, SNDCTL_DSP_SAMPLESIZE, &afmt) ||
+	   0 > ioctl(out_fd, SNDCTL_DSP_STEREO, &stereo) ||
+	   0 > ioctl(out_fd, SNDCTL_DSP_SPEED, &rate))
+	  error("Can't configure %s, errno %d", opt_d, errno);
+       
+       if (afmt != afmt_req) 
+	  error("Can't open device in %d-bit mode", out_mode ? 16 : 8);
+       if (!stereo)
+	  error("Can't open device in stereo");
+       
+       out_rate= rate;
+       
+       if (-1 == ioctl(out_fd, SNDCTL_DSP_GETOSPACE, &info))
+	  error("Can't get audio buffer info, errno %d", errno);
+
+       if (!retry && info.fragsize != (1<<fragsize)) {
+	  // We've received a different fragment size to what we asked
+	  // for.  This means that the numfrags calculation is wrong.
+	  // Re-open based on this fragsize.
+	  close(out_fd);
+	  for (fragsize= 1; (1<<fragsize) < info.fragsize; fragsize++) ;
+	  retry= 1;
+	  //warn("Retrying /dev/dsp open for fragsize %d", fragsize);
+	  continue;
+       }
+       break;
+    }
     
-    afmt= afmt_req= ((out_mode == 0) ? AFMT_U8 : 
-		     ((char*)&test)[0] ? AFMT_S16_LE : AFMT_S16_BE);
-    stereo= 1;
-    rate= out_rate;
-    fragsize= 14;
-    numfrags= 4;
-    
-    enc= (numfrags<<16) | fragsize;
-    
-    if (0 > ioctl(out_fd, SNDCTL_DSP_SETFRAGMENT, &enc) ||
-	0 > ioctl(out_fd, SNDCTL_DSP_SAMPLESIZE, &afmt) ||
-	0 > ioctl(out_fd, SNDCTL_DSP_STEREO, &stereo) ||
-	0 > ioctl(out_fd, SNDCTL_DSP_SPEED, &rate))
-      error("Can't configure %s, errno %d", opt_d, errno);
-    
-    if (afmt != afmt_req) 
-      error("Can't open device in %d-bit mode", out_mode ? 16 : 8);
-    if (!stereo)
-      error("Can't open device in stereo");
-    
-    out_rate= rate;
-    
-    if (-1 == ioctl(out_fd, SNDCTL_DSP_GETOSPACE, &info))
-      error("Can't get audio buffer info, errno %d", errno);
     out_bsiz= info.fragsize;
     out_blen= out_mode ? out_bsiz/2 : out_bsiz;
     out_bps= out_mode ? 4 : 2;

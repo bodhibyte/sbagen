@@ -353,9 +353,16 @@ looper_init() {
    oc.seek_func= oc_seek;
    oc.close_func= oc_close;
    oc.tell_func= oc_tell;
-   for (a= 0; a<3; a++) 
-      if (0 > ov_open_callbacks(&str[a], &str[a].ogg, NULL, 0, oc)) 
+   for (a= 0; a<3; a++) {
+      AStream *aa= &str[a];
+      aa->rd= data;
+      aa->mode= 0;
+      aa->buf0= ALLOC_ARR(2048, short);
+      aa->buf1= aa->buf0 + 2048;
+      aa->b_rd= aa->b_end= aa->buf0;
+      if (0 > ov_open_callbacks(aa, &aa->ogg, NULL, 0, oc)) 
 	 error("Problem opening OGG bitstream");
+   }
 
    // Find the total length of the file
    datcnt= ov_pcm_total(&str[0].ogg, -1);
@@ -449,14 +456,6 @@ looper_init() {
    //	      seg0, seg1, fade_cnt, del_amp);
 
    // Init three streams and start off
-   for (a= 0; a<3; a++) {
-      AStream *aa= &str[a];
-      aa->rd= data;
-      aa->mode= 0;
-      aa->buf0= ALLOC_ARR(2048, short);
-      aa->buf1= aa->buf0 + 2048;
-      aa->b_rd= aa->b_end= aa->buf0;
-   }
    looper_sched();
 
    // Start a thread to handle generation of the mix stream
