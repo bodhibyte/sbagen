@@ -1,4 +1,4 @@
 :
 echo "Beta 16 Hz"
 echo ""
-sbagen -i pink/40 300+16/10
+sbagen $* -i pink/40 300+16/10

@@ -6,5 +6,17 @@
 1.0.2	Made more friendly to other compilers
 	No longer requires C++ part of GCC to build
 
+1.0.3	Allowed sequence file to be read from standard input
+	Changed -v option to -D, and added options -o -O -L -Q
+	Tidied up time + voice output, and time scanning
+	Switched to using stderr for informational output, with quiet option
+	Added facility to output to a file or pipe
+	Added a time limit option
+	Improved synchronisation with real-time
+	Added bell sound
 
-	
+TO-DO	Allow multiple simultaneous sequences to run, overlaying one another
+	Tone-set option to gently oscillate the beat frequency up and down
+	Fade between tone-sets according to joystick port input
+	Allow specification of fade-in-out intervals other than 30 secs
+	Open /dev/dsp twice, and set buffers not-too-long and not-too-short

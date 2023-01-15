@@ -17,7 +17,7 @@
 //	If you really don't have a copy of the GNU GPL, I'll send you one.
 //	
 
-#define VERSION "1.0.2"
+#define VERSION "1.0.3"
 
 #include <stdio.h>
 #include <math.h>
@@ -48,14 +48,14 @@ inline int t_per0(int t0, int t1) ;
 inline int t_mid(int t0, int t1) ;
 int main(int argc, char **argv) ;
 void status(char *) ;
-void dispCurrPer( ) ;
+void dispCurrPer( FILE* ) ;
 void init_sin_table() ;
 void debug(char *fmt, ...) ;
 void * CAlloc(size_t len) ;
 char * StrDup(char *str) ;
 inline int calcNow() ;
 //inline double noise() ;
-void loop(int ) ;
+void loop() ;
 void outChunk() ;
 void corrVal(int ) ;
 int readLine() ;
@@ -70,6 +70,9 @@ void readTimeLine();
 void setupMidn();
 int voicesEq(Voice *, Voice *);
 void error(char *fmt, ...) ;
+int sprintTime(char *, int);
+int sprintVoice(char *, Voice *, Voice *);
+int readTime(char *, int *);
 
 void 
 usage() {
@@ -77,13 +80,20 @@ usage() {
 	"Copyright (c) 1999 Jim Peters, released under the GNU GPL\n\n"
 	"Usage: sbagen [options] seq-file\n"
 	"       sbagen [options] -i tone-specs ...\n\n"
-	"Options:  -v        Display the full interpreted sequence before playing\n"
+	"Options:  -D        Display the full interpreted sequence instead of playing it\n"
+	"          -Q        Quiet - don't display running status\n"
+	"          -i        Immediate.  Take the remainder of the command line to be\n"
+	"                     tone-specifications, and play them continuously\n"
 	"          -q mult   Quick.  Run through quickly (real time x `mult') from the\n"
 	"                     start time, rather than wait for real time to pass\n"
+	"\n"
 	"          -r rate   Manually select the output rate (default is 44100 Hz)\n"
 	"          -b bits   Select the number bits for output (8 or 16, default 16)\n"
-	"          -i        Immediate.  Take the remainder of the command line to be\n"
-	"                     tone-specifications, and play them continuously"
+	"          -L time   Select the length of time (hh:mm or hh:mm:ss) to output\n"
+	"                     for.  Default is to output forever.\n"
+	"\n"
+	"          -o file   Output raw data to the given file instead of /dev/dsp\n"
+	"          -O        Output raw data to the standard output\n"
 	);
 }
 
@@ -91,15 +101,15 @@ usage() {
 #define N_CH 8			// Number of channels
 
 struct Voice {
-  int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise
+  int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell
   double amp;			// Amplitude level (0-32767)
-  double carr;			// Carrier freq (for binaural)
+  double carr;			// Carrier freq (for binaural/bell)
   double res;			// Resonance freq (-ve or +ve) (for binaural)
 };
 
 struct Channel {
   Voice v;			// Current voice setting (updated from current period)
-  int typ;			// Current type: 0 off, 1 binaural, 2 pink noise
+  int typ;			// Current type: 0 off, 1 binaural, 2 pink noise, 3 bell
   int amp;			// Current state, according to current type
   int inc1, off1;		//  ::  (for binaural tones, offset + increment into sine 
   int inc2, off2;		//  ::   table * 65536)
@@ -141,6 +151,7 @@ short *out_buf;			// Output buffer
 int out_bsiz;			// Output buffer size (bytes)
 int out_blen;			// Output buffer length (samples)
 int out_buf_ms;			// Time to output a buffer-ful in ms
+int out_buf_lo;			// Time to output a buffer-ful, fine-tuning in ms/0x10000
 int out_fd;			// Output file descriptor
 int out_rate= 44100;		// Sample rate
 int out_mode= 0;		// Output mode: 0 short[2], 1 unsigned char[2]
@@ -156,9 +167,16 @@ int ns_tbl[1<<NS_BIT];
 int ns_off= 0;
 
 int fast_tim0= -1;		// First time mentioned in the sequence file (for -q option)
+int fast_mult= 0;		// 0 to sync to clock (adjusting as necessary), or else sync to
+				//  output rate, with the multiplier indicated
 
-int opt_v;
+int opt_D;
+int opt_Q;
 int opt_i;
+int opt_q;
+int opt_O;
+int opt_L= -1;			// Length in ms, or -1
+char *opt_o;			// File name to output to, or 0
 
 //
 //	Time-keeping functions
@@ -185,7 +203,6 @@ inline int t_mid(int t0, int t1) {		// Midpoint of period from t0 to t1
 
 int 
 main(int argc, char **argv) {
-  int mult= 0;		// Multiple if going fast
   int val;
   char dmy;
 
@@ -194,14 +211,19 @@ main(int argc, char **argv) {
   setupMidn();
 
   // Scan options
-  while (argc > 0 && argv[0][0] == '-') {
+  while (argc > 0 && argv[0][0] == '-' && argv[0][1]) {
     char *p= 1 + *argv++; argc--;
     while (*p) switch (*p++) {
-     case 'v': opt_v= 1; break;
+     case 'D': opt_D= 1; break;
+     case 'Q': opt_Q= 1; break;
      case 'i': opt_i= 1; break;
+     case 'O': opt_O= 1; 
+       if (!fast_mult) fast_mult= 1; 		// Don't try to sync with real time
+       break;
      case 'q': 
-       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &mult, &dmy)) usage();
-       if (mult < 1) mult= 1;
+       opt_q= 1;
+       if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &fast_mult, &dmy)) usage();
+       if (fast_mult < 1) fast_mult= 1;
        break;
      case 'r':
        if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &out_rate, &dmy)) usage();
@@ -210,6 +232,16 @@ main(int argc, char **argv) {
        if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &val, &dmy)) usage();
        if (val != 8 && val != 16) usage();
        out_mode= (val == 8) ? 1 : 0;
+       break;
+     case 'o':
+       if (argc-- < 1) usage();
+       opt_o= *argv++;
+       if (!fast_mult) fast_mult= 1;		// Don't try to sync with real time
+       break;
+     case 'L':
+       if (argc-- < 1 || 0 == (val= readTime(*argv, &opt_L)) || 
+	   1 == sscanf(*argv++ + val, " %c", &dmy)) 
+	 usage();
        break;
      default:
        usage(); break;
@@ -231,7 +263,7 @@ main(int argc, char **argv) {
     readSeq(argv[0]);
   }
 
-  loop(mult);
+  loop();
   return 0;
 }
 
@@ -243,77 +275,78 @@ void
 status(char *err) {
   int a;
   int nch= N_CH;
+  char *p= buf;
 
+  if (opt_Q) return;
+
+  p += sprintf(p, "\033[K  ");
+  p += sprintTime(p, now);
   while (nch > 1 && chan[nch-1].v.typ == 0) nch--;
+  for (a= 0; a<nch; a++)
+    p += sprintVoice(p, &chan[a].v, 0);
+  if (err) p += sprintf(p, " %s", err);
 
-  printf("\033[K  %02d:%02d:%02d", 
-	 now % 86400000 / 3600000,
-	 now % 3600000 / 60000,
-	 now % 60000 / 1000);
-  for (a= 0; a<nch; a++) switch (chan[a].v.typ) {
-   default:
-     printf(" -"); break;
-   case 1:
-     printf(" %.2f%+.2f/%.2f", chan[a].v.carr, chan[a].v.res, 
-	    AMP_AD(chan[a].v.amp)); break;
-   case 2:
-     printf(" pink/%.2f", AMP_AD(chan[a].v.amp)); break;
-  }
-  if (err) printf(" %s", err);
-  printf("\r");
-  fflush(stdout);
-  printf("\033[K");
+  fprintf(stderr, "%s\r", buf);
+  fflush(stderr);
 }
 
 void 				// Display current period details
-dispCurrPer() {
+dispCurrPer(FILE *fp) {
   int a;
   Voice *v0, *v1;
   char *p0, *p1;
   int len0, len1;
   int nch= N_CH;
 
+  if (opt_Q) return;
 
   p0= buf;
   p1= buf_copy;
   
-  p0 += sprintf(p0, "* %02d:%02d:%02d",
-		per->tim % 86400000 / 3600000,
-		per->tim % 3600000 / 60000,
-		per->tim % 60000 / 1000);
-  p1 += sprintf(p1, "  %02d:%02d:%02d", 
-		per->nxt->tim % 86400000 / 3600000,
-		per->nxt->tim % 3600000 / 60000,
-		per->nxt->tim % 60000 / 1000);
+  p0 += sprintf(p0, "* ");
+  p0 += sprintTime(p0, per->tim);
+  p1 += sprintf(p1, "  ");	
+  p1 += sprintTime(p1, per->nxt->tim);
+
   v0= per->v0; v1= per->v1;
   while (nch > 1 && v0[nch-1].typ == 0) nch--;
-  for (a= 0; a<nch; a++, v0++, v1++) switch (v0->typ) {
-   default:
-     p0 += sprintf(p0, " -");
-     p1 += sprintf(p1, " -");
-     break;
-   case 1:
-     p0 += len0= sprintf(p0, " %.2f%+.2f/%.2f", v0->carr, v0->res, AMP_AD(v0->amp));
-     if (v0->carr != v1->carr || v0->res != v1->res || v0->amp != v1->amp)
-       p1 += len1= sprintf(p1, " %.2f%+.2f/%.2f", v1->carr, v1->res, AMP_AD(v1->amp));
-     else 
-       p1 += len1= sprintf(p1, "  ::");
-     while (len0 < len1) { *p0++= ' '; len0++; }
-     while (len1 < len0) { *p1++= ' '; len1++; }
-     break;
-   case 2:
-     p0 += len0= sprintf(p0, " pink/%.2f", AMP_AD(v0->amp));
-     if (v0->amp != v1->amp)
-       p1 += len1= sprintf(p1, " pink/%.2f", AMP_AD(v1->amp));
-     else 
-       p1 += len1= sprintf(p1, "  ::");
-     while (len0 < len1) { *p0++= ' '; len0++; }
-     while (len1 < len0) { *p1++= ' '; len1++; }
-     break;
+  for (a= 0; a<nch; a++, v0++, v1++) {
+    p0 += len0= sprintVoice(p0, v0, 0);
+    p1 += len1= sprintVoice(p1, v1, v0);
+    while (len0 < len1) { *p0++= ' '; len0++; }
+    while (len1 < len0) { *p1++= ' '; len1++; }
   }
   *p0= 0; *p1= 0;
-  printf("%s\n%s\n", buf, buf_copy);
-  fflush(stdout);
+  fprintf(fp, "%s\n%s\n", buf, buf_copy);
+  fflush(fp);
+}
+
+int
+sprintTime(char *p, int tim) {
+  return sprintf(p, "%02d:%02d:%02d",
+		 tim % 86400000 / 3600000,
+		 tim % 3600000 / 60000,
+		 tim % 60000 / 1000);
+}
+
+int
+sprintVoice(char *p, Voice *vp, Voice *dup) {
+  switch (vp->typ) {
+   default:
+     return sprintf(p, " -");
+   case 1:
+     if (dup && vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
+       return sprintf(p, "  ::");
+     return sprintf(p, " %.2f%+.2f/%.2f", vp->carr, vp->res, AMP_AD(vp->amp));
+   case 2:
+     if (dup && vp->amp == dup->amp)
+       return sprintf(p, "  ::");
+     return sprintf(p, " pink/%.2f", AMP_AD(vp->amp));
+   case 3:
+     if (dup && vp->carr == dup->carr && vp->amp == dup->amp)
+       return sprintf(p, "  ::");
+     return sprintf(p, " bell%+.2f/%.2f", vp->carr, AMP_AD(vp->amp));
+  }
 }
 
 void 
@@ -338,8 +371,8 @@ error(char *fmt, ...) {
 void 
 debug(char *fmt, ...) {
   va_list ap; va_start(ap, fmt);
-  vfprintf(stdout, fmt, ap);
-  printf("\n");
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\n");
 }
 
 void *
@@ -470,44 +503,58 @@ noise2() {
 //
 
 void 
-loop(int fast_mult) {	
+loop() {	
   int c, cnt;
   int err;		// Error to add to `now' until next cnt==0
   int fast= fast_mult != 0;
+  int vfast= fast_mult > 20;		// Very fast - update status line often
   int utime= 0;
+  int now_lo= 0;			// Low-order 16 bits of `now' (fractional)
+  int err_lo= 0;
+  int ms_inc;
 
   setup_device();
   cnt= 1 + 1999 / out_buf_ms;	// Update every 2 seconds or so
-  now= fast ? fast_tim0 : calcNow();
+  now= opt_q ? fast_tim0 : calcNow();
   err= fast ? out_buf_ms * (fast_mult - 1) : 0;
 
-  printf("\n");
+  if (!opt_Q) fprintf(stderr, "\n");
   corrVal(0);		// Get into correct period
-  dispCurrPer();	// Display
+  dispCurrPer(stderr);	// Display
   status(0);
   
   while (1) {
     for (c= 0; c < cnt; c++) {
       corrVal(1);
       outChunk();
-      now += out_buf_ms + err;
+      ms_inc= out_buf_ms + err;
+      now_lo += out_buf_lo + err_lo;
+      if (now_lo >= 0x10000) { ms_inc += now_lo >> 16; now_lo &= 0xFFFF; }
+      now += ms_inc;
       if (now > H24) now -= H24;
-      if (fast && (c&1)) status(0);
+      if (opt_L >= 0 && (opt_L -= ms_inc) < 0) exit(0);		// All done
+      if (vfast && (c&1)) status(0);
     }
 
-    if (!fast) {
+    if (fast) {
+      if (!vfast) status(0);
+    }
+    else {
+      // Synchronize with real clock, gently over the next second or so
       char buf[32];
-      err= calcNow() - now;		// Make sure that `now' keeps in sync with real
-      if (abs(err) > H12) err= 0;	//  clock, but don't go changing it suddenly
-      sprintf(buf, "(%d)", err); 
-      err /= cnt;
+      int diff= calcNow() - now;
+      if (abs(diff) > H12) diff= 0;
+      sprintf(buf, "(%d)", diff); 
+
+      err_lo= diff * 0x10000 / cnt;
+      err= err_lo >> 16;
+      err_lo &= 0xFFFF;
 
       if (DEBUG_CHK_UTIME) {
 	int prev= utime;
 	utime= userTime();
 	sprintf(buf, "%d ticks", utime-prev);		// Replaces standard message
       }
-
       status(buf);
     }
   }
@@ -548,6 +595,18 @@ outChunk() {
        tot1 += val;
        tot2 += val;
        break;
+     case 3:	// Bell
+       if (ch->off2) {
+	 ch->off1 += ch->inc1;
+	 ch->off1 &= (ST_SIZ << 16) - 1;
+	 val= ch->off2 * sin_table[ch->off1 >> 16];
+	 tot1 += val; tot2 += val;
+	 if (--ch->inc2 < 0) {
+	   ch->inc2= out_rate/20;
+	   ch->off2 -= 1 + ch->off2 / 12;	// Knock off 10% each 50 ms
+	 }
+       }
+       break;
     }
     
     out_buf[off++]= tot1 >> 16;
@@ -580,12 +639,17 @@ corrVal(int running) {
   Voice *v0, *v1;
   double rat0, rat1;
   double amp, carr, res;
+  int trigger= 0;
 
   while ((now >= t0) ^ (now >= t1) ^ (t1 > t0)) {
     per= per->nxt;
     t0= per->tim;
     t1= per->nxt->tim;
-    if (running) { dispCurrPer(); status(0); }
+    if (running) {
+      fprintf(stderr, "\033[K");
+      dispCurrPer(stderr); status(0);
+    }
+    trigger= 1;		// Trigger bells or whatever
   }
 
   rat1= t_per0(t0, now) / (double)t_per24(t0, t1);
@@ -599,6 +663,8 @@ corrVal(int running) {
     if (ch->v.typ != v0->typ) {
       switch (ch->v.typ= ch->typ= v0->typ) {
        case 1:
+	 ch->off1= ch->off2= 0; break;
+       case 3:
 	 ch->off1= ch->off2= 0; break;
       }
     }
@@ -618,6 +684,17 @@ corrVal(int running) {
      case 2:
        ch->amp= (int)(ch->v.amp= rat0 * v0->amp + rat1 * v1->amp);
        break;
+     case 3:
+       amp= v0->amp;		// No need to slide, as bell only rings briefly
+       carr= v0->carr;
+       ch->amp= ch->v.amp= amp;
+       ch->v.carr= carr;
+       ch->inc1= (int)(carr / out_rate * ST_SIZ * 65536);
+       if (trigger) {		// Trigger the bell only on entering the period
+	 ch->off2= ch->amp;
+	 ch->inc2= out_rate/20;
+       }
+       break;
     }
   }
 }       
@@ -633,6 +710,30 @@ setup_device(void) {
   audio_buf_info info;
   int test= 1;
 
+  // Handle output to files and pipes
+  if (opt_O || opt_o) {
+    if (opt_O)
+      out_fd= 1;		// stdout
+    else {
+      if (0 > (out_fd= creat(opt_o, 0666))) 
+	error("Can't open \"%s\", errno %d", opt_o, errno);
+    }
+    out_blen= out_rate / 5;		// 10 fragments a second
+    while (out_blen & (out_blen-1)) out_blen &= out_blen-1;		// Make power of two
+    out_bsiz= out_blen * (out_mode ? 1 : 2);
+    out_buf= (short*)CAlloc(out_blen * sizeof(short));
+    out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
+    out_buf_ms= out_buf_lo >> 16;
+    out_buf_lo &= 0xFFFF;
+
+    if (!opt_Q)
+      fprintf(stderr, 
+	      "Outputting %d-bit audio at %d Hz with %d-sample blocks, %d ms per block\n",
+	      out_mode ? 8 : 16, out_rate, out_blen/2, out_buf_ms);
+    return;
+  }
+
+  // Normal /dev/dsp output
   if (0 > (out_fd= open("/dev/dsp", O_WRONLY)))
     error("Can't open /dev/dsp, errno %d", errno);
   
@@ -663,10 +764,14 @@ setup_device(void) {
   out_bsiz= info.fragsize;
   out_blen= out_mode ? out_bsiz : out_bsiz / 2;
   out_buf= (short*)CAlloc(out_blen * sizeof(short));
-  out_buf_ms= (int)(1000.0 * 0.5 * out_blen / out_rate);
+  out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
+  out_buf_ms= out_buf_lo >> 16;
+  out_buf_lo &= 0xFFFF;
 
-  printf("Outputting %d-bit audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
-	 out_mode ? 8 : 16, out_rate, info.fragstotal, out_blen/2, out_buf_ms);
+  if (!opt_Q)
+    fprintf(stderr, 
+	    "Outputting %d-bit audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
+	    out_mode ? 8 : 16, out_rate, info.fragstotal, out_blen/2, out_buf_ms);
 }
 
 //
@@ -755,7 +860,7 @@ readSeq(char *fnam) {
   // Setup a `now' value to use for NOW in the sequence file
   now= calcNow();	
 
-  in= fopen(fnam, "r");
+  in= (0 == strcmp("-", fnam)) ? stdin : fopen(fnam, "r");
   if (!in) error("Can't open sequence file");
   
   in_lin= 0;
@@ -842,6 +947,15 @@ correctPeriods() {
 	memcpy(pp->v0, pp->prv->v1, sizeof(pp->v0));
 	memcpy(qq->v1, qq->nxt->v0, sizeof(qq->v1));
 
+	// Special handling for bells
+	for (a= 0; a<N_CH; a++) {
+	  if (pp->v0[a].typ == 3 && pp->fi != -3)
+	    pp->v0[a].typ= 0;
+
+	  if (qq->v1[a].typ == 3 && pp->fi == -3)
+	    qq->v1[a].typ= 0;
+	}
+	      
 	fo= pp->prv->fo;
 	fi= qq->nxt->fi;
 
@@ -852,7 +966,7 @@ correctPeriods() {
 	  for (a= 0; a<N_CH; a++) {
 	    Voice *vp= &pp->v0[a];
 	    Voice *vq= &qq->v1[a];
-	    if (vp->typ == 0 && vq->typ != 0) {
+	    if (vp->typ == 0 && vq->typ != 0 && vq->typ != 3) {
 	      memcpy(vp, vq, sizeof(*vp)); vp->amp= 0;
 	    }
 	    else if (vp->typ != 0 && vq->typ == 0) {
@@ -874,7 +988,15 @@ correctPeriods() {
 	       (vp->carr != vq->carr || vp->res != vq->res))
 	      ) {
 	    vp->amp= vq->amp= 0;		// To silence
-	    midpt= 1;				// Definately need the mid-point
+	    midpt= 1;				// Definitely need the mid-point
+
+	    if (vq->typ == 3) {	 		// Special handling for bells
+	      vq->amp= qq->v1[a].amp; 
+	      qq->nxt->v0[a].typ= qq->nxt->v1[a].typ= 0;
+	    }
+	  }
+	  else if (vp->typ == 3) {		// Else smooth transition - for bells not so smooth
+	    qq->v0[a].typ= qq->v1[a].typ= 0;
 	  }
 	  else {				// Else smooth transition
 	    vp->amp= vq->amp= (vp->amp + vq->amp) / 2;
@@ -955,17 +1077,19 @@ correctPeriods() {
   }
 
   // Print the whole lot out
-  if (opt_v) {
+  if (opt_D) {
     Period *pp;
     if (per->nxt != per)
       while (per->prv->tim < per->tim) per= per->nxt;
 
     pp= per;
     do {
-      dispCurrPer();
+      dispCurrPer(stdout);
       per= per->nxt;
     } while (per != pp);
     printf("\n");
+
+    exit(0);		// All done
   }  
 }
 
@@ -984,6 +1108,11 @@ voicesEq(Voice *v0, Voice *v1) {
        break;
      case 2:
        if (v0->amp != v1->amp)
+	 return 0;
+       break;
+     case 3:
+       if (v0->amp != v1->amp ||
+	   v0->carr != v1->carr)
 	 return 0;
        break;
     }
@@ -1058,6 +1187,12 @@ readNameDef() {
       nd->vv[ch].amp= AMP_DA(amp);
       continue;
     }
+    if (2 == sscanf(p, "bell%lf/%lf %c", &carr, &amp, &dmy)) {
+      nd->vv[ch].typ= 3;
+      nd->vv[ch].carr= carr;
+      nd->vv[ch].amp= AMP_DA(amp);
+      continue;
+    }
     if (3 == sscanf(p, "%lf%lf/%lf %c", &carr, &res, &amp, &dmy)) {
       nd->vv[ch].typ= 1;
       nd->vv[ch].carr= carr;
@@ -1086,7 +1221,6 @@ badTime(char *tim) {
 void 
 readTimeLine() {
   char *p, *tim_p;
-  int hh, mm, ss;
   int nn;
   int fo, fi;
   Period *pp;
@@ -1114,17 +1248,9 @@ readTimeLine() {
       p++;
     }
     else if (tim != -1) badTime(tim_p);
-    
-    if (3 > sscanf(p, "%2d:%2d:%2d%n", &hh, &mm, &ss, &nn)) {
-      ss= 0;
-      if (2 > sscanf(p, "%2d:%2d%n", &hh, &mm, &nn)) badTime(tim_p);
-    }
-    p += nn;
 
-    if (hh < 0 || hh >= 24 ||
-	mm < 0 || mm >= 60 ||
-	ss < 0 || ss >= 60) badTime(tim_p);
-    rtim= ((hh * 60 + mm) * 60 + ss) * 1000;
+    if (0 == (nn= readTime(p, &rtim))) badTime(tim_p);
+    p += nn;
 
     if (tim == -1) 
       last_abs_time= tim= rtim;
@@ -1201,6 +1327,23 @@ readTimeLine() {
     pp->fi= -3;		// Special `->' transition
     pp->tim= tim;
   }
+}
+
+int
+readTime(char *p, int *timp) {		// Rets chars consumed, or 0 error
+  int nn, hh, mm, ss;
+
+  if (3 > sscanf(p, "%2d:%2d:%2d%n", &hh, &mm, &ss, &nn)) {
+    ss= 0;
+    if (2 > sscanf(p, "%2d:%2d%n", &hh, &mm, &nn)) return 0;
+  }
+
+  if (hh < 0 || hh >= 24 ||
+      mm < 0 || mm >= 60 ||
+      ss < 0 || ss >= 60) return 0;
+
+  *timp= ((hh * 60 + mm) * 60 + ss) * 1000;
+  return nn;
 }
 
 // END //

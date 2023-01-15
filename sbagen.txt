@@ -20,7 +20,11 @@ facilitating meditation, accessing intuition, exploring consciousness.
 USE AND EXPERIMENT AT YOUR OWN RISK !
 
 If you make any changes or improvements to the code, let me know so
-that I can keep a master copy of all the best bits.
+that I can keep a master copy of all the best bits.  Also, if you come
+up with any interesting tone-sets or sequences that you would like to
+share, along with their story, let me know.  I'm considering
+collecting people's experiences together onto the site, if there is
+enough interest.
 
 Jim Peters, Jan 1999                           <jim@aguazul.demon.co.uk>
                                  <http://www.aguazul.demon.co.uk/bagen/>
@@ -122,7 +126,8 @@ At the moment the code handles output to a stereo /dev/dsp device
 using either 16-bit signed or 8-bit unsigned samples.  Hopefully this
 covers almost everybody's sound card, but if you have something else,
 you will either have to modify the code yourself, or suggest
-modifications to me.
+modifications to me.  You can also output to a file, or to standard
+output, if you wish - see below.
 
 Note that other heavy jobs running may take CPU time away from the
 sound-generation, and cause gaps in the output.  You could try
@@ -169,6 +174,12 @@ This runs the sequence at 480 times the normal speed.  This is quite
 useful to check that a new sequence is going to do what you expect it
 to do.
 
+To check that SBaGen has interpreted your sequence correctly, use the
+-D option, which dumps a listing of the interpreted sequence instead
+of playing it:
+
+>> sbagen -D prog-1
+
 To test a particular sound continuously, use the -i immediate option:
 
 >> sbagen -i pink/40 100+1.5/20 200-4/36 400+8/2
@@ -190,6 +201,50 @@ If your sound card doesn't support 16-bit output, you'll need to use
 the -b option to select 8-bit output, for example:
 
 >> sbagen -b 8 -i pink/40 100+1.5/20 200+6/30
+
+Note that all the executable test tone-sets (t-*) and programs
+(prog-*) accept options and pass them on to SBaGen, so you can use the
+same options with these as well.
+
+
+Outputting to a pipe or a file
+------------------------------
+
+You don't need to read this section if you will only be outputting
+directly to the soundcard.
+
+If you wish to pipe output on to some other utility, use the -O
+option.  When this is used, the real time is no longer checked, so you
+can output to both real-time devices (such as a mixer daemon), or to a
+file or effect utility.  It is assumed that the eventual output device
+will use exactly the frequency specified, or otherwise all the
+frequencies and timings will be out.
+
+The -o option can also be used to output directly to a file.  In both
+cases headerless raw data is output.  For example, to pipe to bplay,
+you could use the following:
+
+>> sbagen -r 8000 -O -i 100+0.92/30 200+4.2/15 | bplay -S -s 8000 -b 16
+
+The -L option allows a time-limit to be set on the output.  So, for
+example, to output 45 minutes of data to a file, and then play it with
+bplay, use:
+
+>> sbagen -r 8000 -o out.raw -L 0:45 -i 100+0.92/30 200+4.2/15
+>> bplay -S -s 8000 -b 16 out.raw
+
+The output file may be a few kilobytes larger than you expect - this
+is because output is generated in blocks, and the last block output
+may go over the time limit slightly.
+
+The -Q option may be useful to turn off the information that the
+utility normally writes to the screen.
+
+If you are using another utility (perl or whatever) to generate the
+sequence-file, you can pipe it directly to the utility, and use `-' as
+the filename.  For example:
+
+>> cat prog-1 | sbagen -
 
 
 Sequence-file format
@@ -221,11 +276,12 @@ see how all these work together.
   The name starts with a letter, and may continue with letters,
   numbers, `_' or `-'.  Following the colon is a list of one or more
   tone-specifications.  There are a maximum of 8 of these.  There are
-  three types:
+  four types:
 
       -					# Channel not in use
       pink/<amp>			# Pink noise
       <carrier><sign><freq>/<amp>	# Binaural tones
+      bell+<freq>/<amp>                 # Bell sound
 
   The amplitudes are expressed on a scale 0-100.  The total of all the
   amplitudes <amp> in a tone-set should not exceed 100, or else there
@@ -252,6 +308,10 @@ see how all these work together.
   this matters, but in case it does, you can change it here.  So, for
   example, 100+4/20 generates tones of 102 and 98 Hz, whereas 100-4/20
   generates tones of 98 and 102 Hz.
+
+  The bell sound can be used to give cues and signals during the
+  sequence.  A simple `ping' is generated at the given frequency at
+  the start of the period in which the tone-set is used.
 
   Once a tone-set has been defined, it may be used in time-sequence
   lines.
