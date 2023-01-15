@@ -76,7 +76,7 @@ A: User-defined waveforms
 ---------------
 
 SBaGen -- Sequenced Binaural Beat Generator
-Copyright (c) 1999-2004 Jim Peters, http://uazu.net/
+Copyright (c) 1999-2005 Jim Peters, http://uazu.net/
   
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -291,19 +291,37 @@ pieces.
 2.2: Installation for Mac OS X users
 ------------------------------------
 
-SBaGen was originally written as a UNIX tool, and it was adapted to
-Mac OS X by using CoreAudio for audio output.  For this reason it is
-distributed as a TGZ archive, and it uses the text-mode OS X
-'Terminal' application as its user interface.
+From version 1.4.2, Mac OS X users have a DMG file to download which
+will hopefully make it much easier to get things working.  This
+includes a DEMO command-script that you can double-click to run to get
+a quick taster, and a START command-script that sets up Terminal ready
+to play sequences.
 
-Download the TGZ file for Mac OS X onto your desktop.  Start up a
-Terminal (you'll find it under Applications/Utilities/Terminal), and
-type the commands below.  (Note that I'm using '>>' to indicate the
-shell prompt, which you shouldn't type in).  Remember that you can
-save time typing by using the Tab key to expand the filenames as you
-go (e.g. you can probably type De<TAB> for "Desktop").  Also, the
-version number you downloaded will probably be different to this, so
-adjust it accordingly:
+Note that SBaGen was originally written as a UNIX tool, and it was
+adapted to Mac OS X by using CoreAudio for audio output.  For this
+reason it uses the text-mode OS X 'Terminal' application as its user
+interface.  Versions before 1.4.2 were also distributed as traditional
+UNIX TGZ archives.
+
+However, with the DMG archive of version 1.4.2 on, installation should
+just be a matter of double-clicking the archive, and dragging things
+around.  However, you may still want to read the TGZ installation
+instructions below to understand more about how to use sbagen and/or
+the command-line.  The new START script should take most of the hassle
+out of setting up the command-line, though.
+
+
+2.2.1: Installation of pre-1.4.2 versions for Mac OS X users
+------------------------------------------------------------
+
+For versions before 1.4.2, download the TGZ file for Mac OS X onto
+your desktop.  Start up a Terminal (you'll find it under
+Applications/Utilities/Terminal), and type the commands below.  (Note
+that I'm using '>>' to indicate the shell prompt, which you shouldn't
+type in).  Remember that you can save time typing by using the Tab key
+to expand the filenames as you go (e.g. you can probably type De<TAB>
+for "Desktop").  Also, the version number you downloaded will probably
+be different to this, so adjust it accordingly:
 
 >> tar xvzf Desktop/sbagen-mac-1.0.10.tgz
 >> cd sbagen-mac-1.0.10

@@ -1,7 +1,7 @@
 //
 //	SBaGen - Sequenced Binaural Beat Generator
 //
-//	(c) 1999-2004 Jim Peters <jim@uazu.net>.  All Rights Reserved.
+//	(c) 1999-2005 Jim Peters <jim@uazu.net>.  All Rights Reserved.
 //	For latest version see http://sbagen.sf.net/ or
 //	http://uazu.net/sbagen/.  Released under the GNU GPL version 2.
 //	Use at your own risk.
@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.4.2"
+#define VERSION "1.4.3"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -129,9 +129,11 @@
  #include <io.h>
  #define write _write
  #define vsnprintf _vsnprintf
+ typedef long long S64;		// I have no idea if this is correct for MSVC
 #else
  #include <unistd.h>
  #include <sys/time.h>
+ typedef long long S64;
 #endif
 
 #ifdef T_MINGW
@@ -408,7 +410,7 @@ int fast_tim0= -1;		// First time mentioned in the sequence file (for -q and -S 
 int fast_tim1= -1;		// Last time mentioned in the sequence file (for -E option)
 int fast_mult= 0;		// 0 to sync to clock (adjusting as necessary), or else sync to
 				//  output rate, with the multiplier indicated
-int byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
+S64 byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
 int tty_erase;			// Chars to erase from current line (for ESC[K emulation)
 
 int opt_D;
@@ -1328,9 +1330,9 @@ loop() {
   if (opt_T != -1) now= opt_T;
   err= fast ? out_buf_ms * (fast_mult - 1) : 0;
   if (opt_L)
-    byte_count= out_bps * (int)(opt_L * 0.001 * out_rate);
+    byte_count= out_bps * (S64)(opt_L * 0.001 * out_rate);
   if (opt_E)
-    byte_count= out_bps * (int)(t_per0(now, fast_tim1) * 0.001 * out_rate /
+    byte_count= out_bps * (S64)(t_per0(now, fast_tim1) * 0.001 * out_rate /
 				(fast ? fast_mult : 1));
 
   // Do byte-swapping if bigendian and outputting to a file or stream
@@ -2139,6 +2141,15 @@ OSStatus mac_callback(AudioDeviceID inDevice,
 void 
 writeWAV() {
   char buf[44], *p= buf;
+
+  if (byte_count + 36 != (int)(byte_count + 36)) {
+     int tmp;
+     byte_count= 0xFFFFFFF8-36;
+     tmp= byte_count/out_bps/out_rate;
+     warn("WARNING: Selected length is too long for the WAV format; truncating to %dh%02dm%02ds",
+	  tmp/3600, tmp/60%60, tmp%60);
+  }
+
   addStr("RIFF");
   addU4(byte_count + 36);
   addStr("WAVE");

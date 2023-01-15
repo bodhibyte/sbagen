@@ -1,3 +1,6 @@
+1.4.3	Fixed problem when playing 7+ hour sequences with -SE or -L
+	Warns properly if the WAV file limit of ~7 hours is exceeded, and truncates
+
 1.4.2	Handles playing sequences to the clock across a daylight savings time change
 	Improved Linux /dev/dsp initialisation to get a good fragment size
 	Fixed OGG setup bug that affected some Linux systems when playing river sounds
