@@ -1,6 +1,0 @@
-:
-
-CC='cc -DT_LINUX -Wall -g -lm'
-
-$CC sbagen.c -o sbagen || exit 1
-

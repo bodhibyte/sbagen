@@ -1,9 +1,0 @@
-#!/bin/sh
-
-CFLAGS="-DT_MACOSX -I/System/Library/Frameworks/Carbon.framework/Headers -fpascal-strings"
-LIBS="-framework Carbon -framework CoreAudio"
-
-CC="cc $CFLAGS -Wall -O3 $LIBS -lm"
-
-$CC sbagen.c -o sbagen || exit 1
-

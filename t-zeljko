@@ -1,4 +1,0 @@
-:
-echo "A frequency Zeljko Dakic finds gives interesting experiences: 5.485Hz"
-echo ""
-sbagen $* -i 200+5.485/50
