@@ -1,3 +1,9 @@
+1.4.4   Fixes to support sound output on Vista
+	Make "Edit sequence" work on WinXP
+	Default to 60-minutes for WAV-output if a length can't be established
+	"Write to WAV (30 min)" option for Windows
+	Stop status line wrapping on Windows
+
 1.4.3	Fixed problem when playing 7+ hour sequences with -SE or -L
 	Warns properly if the WAV file limit of ~7 hours is exceeded, and truncates
 

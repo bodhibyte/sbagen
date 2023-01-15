@@ -1,7 +1,7 @@
 //
 //	SBaGen - Sequenced Binaural Beat Generator
 //
-//	(c) 1999-2005 Jim Peters <jim@uazu.net>.  All Rights Reserved.
+//	(c) 1999-2007 Jim Peters <jim@uazu.net>.  All Rights Reserved.
 //	For latest version see http://sbagen.sf.net/ or
 //	http://uazu.net/sbagen/.  Released under the GNU GPL version 2.
 //	Use at your own risk.
@@ -28,7 +28,7 @@
 //	FINK project's patches to ESounD, by Shawn Hsiao and Masanori
 //	Sekino.  See: http://fink.sf.net
 
-#define VERSION "1.4.3"
+#define VERSION "1.4.4"
 
 // This should be built with one of the following target macros
 // defined, which selects options for that platform, or else with some
@@ -237,7 +237,7 @@ OSStatus mac_callback(AudioDeviceID, const AudioTimeStamp *, const AudioBufferLi
 void 
 help() {
    printf("SBaGen - Sequenced Binaural Beat Generator, version " VERSION 
-	  NL "Copyright (c) 1999-2004 Jim Peters, http://uazu.net/, all rights "
+	  NL "Copyright (c) 1999-2007 Jim Peters, http://uazu.net/, all rights "
 	  NL "  reserved, released under the GNU GPL v2.  See file COPYING."
 	  NL 
 	  NL "Usage: sbagen [options] seq-file ..."
@@ -296,7 +296,7 @@ help() {
 void 
 usage() {
   error("SBaGen - Sequenced Binaural Beat Generator, version " VERSION 
-	NL "Copyright (c) 1999-2004 Jim Peters, http://uazu.net/, all rights "
+	NL "Copyright (c) 1999-2007 Jim Peters, http://uazu.net/, all rights "
 	NL "  reserved, released under the GNU GPL v2.  See file COPYING."
 	NL 
 	NL "Usage: sbagen [options] seq-file ..."
@@ -679,8 +679,11 @@ main(int argc, char **argv) {
    
    if (opt_W && !opt_o && !opt_O)
       error("Use -o or -O with the -W option");
-   if (opt_W && opt_L < 0 && !opt_E)
-      error("Use -L or -E with -W option to give the length of the WAV file");
+   if (opt_W && opt_L < 0 && !opt_E) {
+      fprintf(stderr, "*** The length has not been specified for the -W option; assuming 1 hour ***\n");
+      fprintf(stderr, "(Use -L or -E with the -W option to control the length of the WAV file)\n\n");
+      opt_L= 60*60*1000;
+   }
    
    mix_in= 0;
    if (opt_M || opt_m) {
@@ -987,7 +990,7 @@ find_wav_data_start(FILE *in) {
 
 int 
 raw_mix_in(int *dst, int dlen) {
-   short *tmp= (void*)(dst + dlen/2);
+   short *tmp= (short*)(dst + dlen/2);
    int a, rv;
    
    rv= fread(tmp, 2, dlen, mix_in);
@@ -1000,7 +1003,7 @@ raw_mix_in(int *dst, int dlen) {
    // Now convert 16-bit little-endian input data into 20-bit native
    // int values
    if (bigendian) {
-      char *rd= (void*)tmp;
+      char *rd= (char*)tmp;
       for (a= 0; a<rv; a++) {
 	 *dst++= ((rd[0]&255) + (rd[1]<<8)) << 4;
 	 rd += 2;
@@ -1039,6 +1042,14 @@ status(char *err) {
     p += sprintVoice(p, &chan[a].v, 0);
   if (err) p += sprintf(p, " %s", err);
   p1= p;		// End of line
+
+#ifndef ANSI_TTY
+  // Truncate line to 79 characters on Windows
+  if (p1-p0 > 79) {
+    p1 = p0 + 76;
+    p1 += sprintf(p1, "...");
+  }
+#endif
 
 #ifndef ANSI_TTY
   while (tty_erase > p-p0) *p++= ' ';
@@ -1908,8 +1919,8 @@ setup_device(void) {
      fmt.nChannels= 2;
      fmt.nSamplesPerSec= out_rate;
      fmt.wBitsPerSample= out_mode ? 16 : 8;
-     fmt.nBlockAlign= 1;
-     fmt.nAvgBytesPerSec= out_rate * 2 * (out_mode ? 2 : 1);
+     fmt.nBlockAlign= fmt.nChannels * (fmt.wBitsPerSample/8);
+     fmt.nAvgBytesPerSec= fmt.nSamplesPerSec * fmt.nBlockAlign;
      fmt.cbSize= 0;
      aud_handle= NULL;
 
@@ -2769,7 +2780,7 @@ readTimeLine() {
   Period *pp;
   NameDef *nd;
   static int last_abs_time= -1;
-  int tim, rtim;
+  int tim, rtim = 0;
 
   if (!(p= getWord())) badSeq();
   tim_p= p;

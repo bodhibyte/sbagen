@@ -24,7 +24,7 @@ static int synth_extra;		// Extra samples carried over from previous frame
 void 
 mp3_init() {
    mp3_len= 32768;
-   mp3_buf= Alloc(mp3_len);
+   mp3_buf= (char*)Alloc(mp3_len);
 
    // Setup MAD decoder
    mad_stream_init(&stream);
@@ -94,7 +94,7 @@ mp3_read(int *dst, int dlen) {
 	 }
 	 rp += cnt;
 
-	 mad_stream_buffer(&stream, mp3_buf, rp - mp3_buf);
+	 mad_stream_buffer(&stream, (const unsigned char*)mp3_buf, rp - mp3_buf);
 	 stream.error= 0;
       }
 

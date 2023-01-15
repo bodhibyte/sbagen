@@ -39,7 +39,7 @@ ogg_init() {
    int a;
 
    // Setup OGG decoder
-   if (0 > ov_open(mix_in, &oggfile, NULL, 0) < 0) 
+   if (0 > ov_open(mix_in, &oggfile, NULL, 0)) 
       error("Input does not appear to be an Ogg bitstream");
 
    // Check for ReplayGain
@@ -283,7 +283,7 @@ zxrandM(int def, char *fmt, ...) {
 // File buffer operations
 size_t
 oc_read(void *ptr, size_t size, size_t nmemb, void *datasource) {
-   AStream *ss= datasource;
+   AStream *ss= (AStream*)datasource;
    int len= size * nmemb;
    if (len > data_end - ss->rd) 
       len= data_end - ss->rd;
@@ -296,7 +296,7 @@ oc_read(void *ptr, size_t size, size_t nmemb, void *datasource) {
 
 int
 oc_seek(void *datasource, ogg_int64_t offset, int whence) {
-   AStream *ss= datasource;
+   AStream *ss= (AStream*)datasource;
    int pos= ss->rd - data;
    switch (whence) {
     case SEEK_SET:
@@ -319,7 +319,7 @@ oc_close(void *datasource) {
 
 long 
 oc_tell(void *datasource) {
-   AStream *ss= datasource;
+   AStream *ss= (AStream*)datasource;
    return ss->rd - data;
 }
 

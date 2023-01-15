@@ -240,12 +240,14 @@ from the desktop:
 
 - To write a WAV file from a sequence instead of playing it,
   right-click and select "Write to WAV".  A file 'out.wav' will be
-  generated.  (Note that this only works with sequences that have a
-  fixed length.)  You can also do this by adding "-Wo out.wav" near
-  the top of a SBG file.
+  generated.  (Note that this only works well with sequences that have
+  a fixed length, otherwise they get a default length of one hour.)
+  You can also do this by adding "-Wo out.wav" near the top of a SBG
+  file and double-clicking on it.
 
 If you need more features than this, you may still need to use the DOS
-prompt, but hopefully you won't.
+prompt, but hopefully you won't, because all the important options can
+be included in the SBG file now.
 
 
 2.1.1: Installation of pre-1.4.0 versions for Windows users
@@ -547,12 +549,6 @@ All these executable tone-set scripts (t-*) accept additional options
 and pass them onto SBaGen, so you can use the same options (e.g. -r
 and -b) with these as well.
 
-For Windows, these same tone-sets are available, translated into batch
-files thanks to Dirk Cloete:
-
->> dir *.bat
->> t-brainstate-alpha
-
 Try out some of these scripts/batch files to get an idea of some of
 the possibilities.
 
@@ -562,7 +558,7 @@ For all platforms (UNIX, Windows and Mac OS X), the sequence files
 
 >> sbagen prog-NSDWS-example.sbg
 
-Have a play with these sequences.  Many of them are designed to run at
+Have a play with these sequences.  Some of them are designed to run at
 night, so you will hear nothing if you play them during the day.  You
 get around this by playing them immediately using '-q 1', or '-S' (run
 from start):

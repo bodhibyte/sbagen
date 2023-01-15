@@ -1,7 +1,0 @@
-##
-##      Half-hour "-p slide" session at 10Hz (alpha waves) mixed with river
-##	sounds.  See SBAGEN.TXT for a full explanation.
-##
-
--m river1.ogg -p slide 200+10/1 mix/100
-
