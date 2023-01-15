@@ -191,6 +191,10 @@ amplitudes (20, 36 and 2).  This combination is supposedly something
 like "body-asleep, brain-awake", assuming I've reproduced it
 correctly.
 
+While you're at it, try the alternate `spin' effect:
+
+>> sbagen -i spin:300+4.2/80
+
 To run at a lower output rate, use the -r option.  The tones still
 come out really well even at 8000Hz, on my sound card at least,
 although the noise suffers.  For example:
@@ -308,6 +312,7 @@ see how all these work together.
       pink/<amp>			# Pink noise
       <carrier><sign><freq>/<amp>	# Binaural tones
       bell+<freq>/<amp>                 # Bell sound
+      spin:<width>+<freq>/<amp>		# Spinning phase shifted pink noise
 
   The amplitudes are expressed on a scale 0-100.  The total of all the
   amplitudes <amp> in a tone-set should not exceed 100, or else there
@@ -338,6 +343,14 @@ see how all these work together.
   The bell sound can be used to give cues and signals during the
   sequence.  A simple `ping' is generated at the given frequency at
   the start of the period in which the tone-set is used.
+
+  The spinning pink noise generates a binaural effect in a completely
+  different way, by shifting the phase of pink noise in opposite
+  directions for each ear, at a given beat frequency.  In this case,
+  the first number is the width of the maximum phase shift from centre
+  in microseconds.  Values from 100 to 500 seem good to me, although
+  you might want to experiment with this.  The second number is the
+  beat frequency and the third is the amplitude, as above.
 
   Once a tone-set has been defined, it may be used in time-sequence
   lines.

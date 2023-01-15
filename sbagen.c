@@ -17,7 +17,7 @@
 //	If you really don't have a copy of the GNU GPL, I'll send you one.
 //	
 
-#define VERSION "1.0.7"
+#define VERSION "1.0.8"
 
 #ifndef NO_DEV_DSP
 #define DSP		// Define to use /dev/dsp, or comment out if not available
@@ -51,6 +51,7 @@ typedef struct Voice Voice;
 typedef struct Period Period;
 typedef struct NameDef NameDef;
 typedef struct BlockDef BlockDef;
+typedef unsigned char uchar;
 
 inline int t_per24(int t0, int t1) ;
 inline int t_per0(int t0, int t1) ;
@@ -121,15 +122,15 @@ usage() {
 #define N_CH 8			// Number of channels
 
 struct Voice {
-  int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell
+  int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin
   double amp;			// Amplitude level (0-32767)
-  double carr;			// Carrier freq (for binaural/bell)
-  double res;			// Resonance freq (-ve or +ve) (for binaural)
+  double carr;			// Carrier freq (for binaural/bell), width (for spin)
+  double res;			// Resonance freq (-ve or +ve) (for binaural/spin)
 };
 
 struct Channel {
   Voice v;			// Current voice setting (updated from current period)
-  int typ;			// Current type: 0 off, 1 binaural, 2 pink noise, 3 bell
+  int typ;			// Current type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin
   int amp;			// Current state, according to current type
   int inc1, off1;		//  ::  (for binaural tones, offset + increment into sine 
   int inc2, off2;		//  ::   table * 65536)
@@ -184,6 +185,7 @@ char buf[4096];			// Buffer for current line
 char buf_copy[4096];		// Used to keep unmodified copy of line
 char *lin;			// Input line (uses buf[])
 char *lin_copy;			// Copy of input line
+double spin_carr_max;		// Maximum `carrier' value for spin (really max width in us)
 
 #define NS_BIT 10
 int ns_tbl[1<<NS_BIT];
@@ -403,6 +405,10 @@ sprintVoice(char *p, Voice *vp, Voice *dup) {
      if (dup && vp->carr == dup->carr && vp->amp == dup->amp)
        return sprintf(p, "  ::");
      return sprintf(p, " bell%+.2f/%.2f", vp->carr, AMP_AD(vp->amp));
+   case 4:
+     if (dup && vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
+       return sprintf(p, "  ::");
+     return sprintf(p, " spin:%.2f%+.2f/%.2f", vp->carr, vp->res, AMP_AD(vp->amp));
   }
 }
 
@@ -504,6 +510,8 @@ struct Noise {
 };
 Noise ntbl[NS_BANDS];
 int nt_off;
+int noise_buf[256];
+uchar noise_off= 0;
 
 static inline int 
 noise2() {
@@ -526,7 +534,7 @@ noise2() {
     ns++;
   }
 
-  return tot >> NS_ADJ;
+  return noise_buf[noise_off++]= (tot >> NS_ADJ);
 }
 
 //	//
@@ -569,6 +577,7 @@ loop() {
   int ms_inc;
 
   setup_device();
+  spin_carr_max= 127.0 / 1E-6 / out_rate;
   cnt= 1 + 1999 / out_buf_ms;	// Update every 2 seconds or so
   now= opt_S ? fast_tim0 : calcNow();
   err= fast ? out_buf_ms * (fast_mult - 1) : 0;
@@ -668,6 +677,13 @@ outChunk() {
 	 }
        }
        break;
+     case 4:	// Spinning pink noise
+       ch->off1 += ch->inc1;
+       ch->off1 &= (ST_SIZ << 16) - 1;
+       val= (ch->inc2 * sin_table[ch->off1 >> 16]) >> 24;
+       tot1 += ch->amp * noise_buf[(uchar)(noise_off+128+val)];
+       tot2 += ch->amp * noise_buf[(uchar)(noise_off+128-val)];
+       break;
     }
     
     out_buf[off++]= tot1 >> 16;
@@ -762,6 +778,8 @@ corrVal(int running) {
 	 ch->off1= ch->off2= 0; break;
        case 3:
 	 ch->off1= ch->off2= 0; break;
+       case 4:
+	 ch->off1= ch->off2= 0; break;
       }
     }
     
@@ -790,6 +808,19 @@ corrVal(int running) {
 	 ch->off2= ch->amp;
 	 ch->inc2= out_rate/20;
        }
+       break;
+     case 4:
+       amp= rat0 * v0->amp + rat1 * v1->amp;
+       carr= rat0 * v0->carr + rat1 * v1->carr;
+       res= rat0 * v0->res + rat1 * v1->res;
+       if (carr > spin_carr_max) carr= spin_carr_max;		// Clipping sweep width
+       if (carr < -spin_carr_max) carr= -spin_carr_max;
+       ch->v.amp= amp;
+       ch->v.carr= carr;
+       ch->v.res= res;
+       ch->amp= (int)amp;
+       ch->inc1= (int)(res / out_rate * ST_SIZ * 65536);
+       ch->inc2= (int)(carr * 1E-6 * out_rate * (1<<24) / ST_AMP);
        break;
     }
   }
@@ -1142,7 +1173,7 @@ correctPeriods() {
 	  }
 	  else {				// Else smooth transition
 	    vp->amp= vq->amp= (vp->amp + vq->amp) / 2;
-	    if (vp->typ == 1) {
+	    if (vp->typ == 1 || vp->typ == 4) {
 	      vp->carr= vq->carr= (vp->carr + vq->carr) / 2;
 	      vp->res= vq->res= (vp->res + vq->res) / 2;
 	    }
@@ -1243,6 +1274,7 @@ voicesEq(Voice *v0, Voice *v1) {
     if (v0->typ != v1->typ) return 0;
     switch (v0->typ) {
      case 1:
+     case 4:
        if (v0->amp != v1->amp ||
 	   v0->carr != v1->carr ||
 	   v0->res != v1->res)
@@ -1337,6 +1369,13 @@ readNameDef() {
     }
     if (3 == sscanf(p, "%lf%lf/%lf %c", &carr, &res, &amp, &dmy)) {
       nd->vv[ch].typ= 1;
+      nd->vv[ch].carr= carr;
+      nd->vv[ch].res= res;
+      nd->vv[ch].amp= AMP_DA(amp);	
+      continue;
+    }
+    if (3 == sscanf(p, "spin:%lf%lf/%lf %c", &carr, &res, &amp, &dmy)) {
+      nd->vv[ch].typ= 4;
       nd->vv[ch].carr= carr;
       nd->vv[ch].res= res;
       nd->vv[ch].amp= AMP_DA(amp);	
