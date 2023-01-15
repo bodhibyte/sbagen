@@ -29,6 +29,9 @@
 
 1.0.8	Added new `spin' effect
 
+1.0.9	Added support for Windows real-time output through direct Win32 calls
+	Added experimental support for user-defined brain waveforms
+
 TO-DO	Maybe necessary to fix DOS output to pipe to use binary mode ?
 	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down

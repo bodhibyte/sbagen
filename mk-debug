@@ -1,0 +1,6 @@
+:
+
+CC='cc -Wall -g -lm'
+
+$CC sbagen.c -o sbagen || exit 1
+

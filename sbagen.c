@@ -1,9 +1,10 @@
 //
 //	SBaGen - Sequenced BinAural Generator
 //
-//	(c) 1999 Jim Peters <jim@aguazul.demon.co.uk>.  All Rights Reserved.
-//	For latest version see <http://www.aguazul.demon.co.uk/bagen/>.
-//	Released under the GNU GPL.  Use at your own risk.
+//	(c) 1999-2001 Jim Peters <jim@uazu.net>.  All Rights Reserved.
+//	For latest version see http://sbagen.sf.net/ or
+//	http://www.uazu.net/sbagen/.  Released under the GNU GPL.  Use
+//	at your own risk.
 //
 //	" This program is free software; you can redistribute it and/or modify
 //	  it under the terms of the GNU General Public License as published by
@@ -14,10 +15,16 @@
 //	  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //	  GNU General Public License for more details. "
 //
-//	If you really don't have a copy of the GNU GPL, I'll send you one.
+//	See the file COPYING for details of this license.
 //	
+//	- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+//
+//	Some code fragments in the Win32 audio handling are based on
+//	code from PLIB (c) 2001 by Steve Baker, originally released
+//	under the LGPL (slDSP.cxx and sl.h).  For the original source,
+//	see the PLIB project: http://plib.sf.net
 
-#define VERSION "1.0.8"
+#define VERSION "1.0.9"
 
 #ifndef NO_DEV_DSP
 #define DSP		// Define to use /dev/dsp, or comment out if not available
@@ -38,12 +45,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/ioctl.h>
 #include <time.h>
 #include <sys/time.h>
-#include <sys/times.h>
-#ifdef DSP
-#include <sys/soundcard.h>
+
+#ifdef MINGW
+ #include <windows.h>
+ #include <mmsystem.h>
+#else
+ #include <sys/ioctl.h>
+ #include <sys/times.h>
+ #ifdef DSP
+  #include <sys/soundcard.h>
+ #endif
 #endif
 
 typedef struct Channel Channel;
@@ -77,7 +90,7 @@ void correctPeriods();
 void setup_device(void) ;
 void readNameDef();
 void readTimeLine();
-void setupMidn();
+void setupMidnight();
 int voicesEq(Voice *, Voice *);
 void error(char *fmt, ...) ;
 int sprintTime(char *, int);
@@ -85,11 +98,16 @@ int sprintVoice(char *, Voice *, Voice *);
 int readTime(char *, int *);
 void writeWAV();
 void writeOut(char *, int);
+void sinc_interpolate(double *, int, int *);
+inline int userTime();
+#ifdef MINGW
+void CALLBACK win32_audio_callback(HWAVEOUT, UINT, DWORD, DWORD, DWORD);
+#endif
 
 void 
 usage() {
   error("SBaGen - Sequenced BinAural sound Generator, version " VERSION "\n"
-	"Copyright (c) 1999 Jim Peters, released under the GNU GPL\n\n"
+	"Copyright (c) 1999-2001 Jim Peters, released under the GNU GPL\n\n"
 	"Usage: sbagen [options] seq-file\n"
 	"       sbagen [options] -i tone-specs ...\n\n"
 	"Options:  -D        Display the full interpreted sequence instead of playing it\n"
@@ -119,10 +137,13 @@ usage() {
 }
 
 #define DEBUG_CHK_UTIME 0	// Check how much user time is being consumed
+#define DEBUG_DUMP_WAVES 0	// Dump out wave tables (to plot with gnuplot)
+#define DEBUG_DUMP_AMP 0	// Dump output amplitude to stdout per chunk
 #define N_CH 8			// Number of channels
 
 struct Voice {
-  int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin
+  int typ;			// Voice type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin,
+   				//   -1 to -100 wave00 to wave99
   double amp;			// Amplitude level (0-32767)
   double carr;			// Carrier freq (for binaural/bell), width (for spin)
   double res;			// Resonance freq (-ve or +ve) (for binaural/spin)
@@ -130,7 +151,8 @@ struct Voice {
 
 struct Channel {
   Voice v;			// Current voice setting (updated from current period)
-  int typ;			// Current type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin
+  int typ;			// Current type: 0 off, 1 binaural, 2 pink noise, 3 bell, 4 spin,
+   				//   -1 to -100 wave00 to wave99
   int amp;			// Current state, according to current type
   int inc1, off1;		//  ::  (for binaural tones, offset + increment into sine 
   int inc2, off2;		//  ::   table * 65536)
@@ -162,6 +184,7 @@ struct BlockDef {
 int *sin_table;
 #define AMP_DA(pc) (40.96 * (pc))	// Display value (%age) to ->amp value
 #define AMP_AD(amp) ((amp) / 40.96)	// Amplitude value to display %age
+int *waves[100];		// Pointers are either 0 or point to a sin_table[]-style array of int
 
 Channel chan[N_CH];		// Current channel states
 int now;			// Current time (milliseconds from midnight)
@@ -208,6 +231,16 @@ int opt_O;
 int opt_L= -1;			// Length in ms, or -1
 char *opt_o;			// File name to output to, or 0
 
+#ifdef MINGW
+#define BUFFER_COUNT 8
+#define BUFFER_SIZE 8192*4
+HWAVEOUT aud_handle;
+WAVEHDR *aud_head[BUFFER_COUNT];
+int aud_current;		// Current header
+int aud_cnt;			// Number of headers in use
+#endif
+
+
 //
 //	Time-keeping functions
 //
@@ -238,7 +271,7 @@ main(int argc, char **argv) {
 
   argc--; argv++;
   init_sin_table();
-  setupMidn();
+  setupMidnight();
 
   // Scan options
   while (argc > 0 && argv[0][0] == '-' && argv[0][1]) {
@@ -390,26 +423,33 @@ sprintTime(char *p, int tim) {
 
 int
 sprintVoice(char *p, Voice *vp, Voice *dup) {
-  switch (vp->typ) {
-   default:
-     return sprintf(p, " -");
-   case 1:
-     if (dup && vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
-       return sprintf(p, "  ::");
-     return sprintf(p, " %.2f%+.2f/%.2f", vp->carr, vp->res, AMP_AD(vp->amp));
-   case 2:
-     if (dup && vp->amp == dup->amp)
-       return sprintf(p, "  ::");
-     return sprintf(p, " pink/%.2f", AMP_AD(vp->amp));
-   case 3:
-     if (dup && vp->carr == dup->carr && vp->amp == dup->amp)
-       return sprintf(p, "  ::");
-     return sprintf(p, " bell%+.2f/%.2f", vp->carr, AMP_AD(vp->amp));
-   case 4:
-     if (dup && vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
-       return sprintf(p, "  ::");
-     return sprintf(p, " spin:%.2f%+.2f/%.2f", vp->carr, vp->res, AMP_AD(vp->amp));
-  }
+   switch (vp->typ) {
+    case 0:
+       return sprintf(p, " -");
+    case 1:
+       if (dup && vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
+	  return sprintf(p, "  ::");
+       return sprintf(p, " %.2f%+.2f/%.2f", vp->carr, vp->res, AMP_AD(vp->amp));
+    case 2:
+       if (dup && vp->amp == dup->amp)
+	  return sprintf(p, "  ::");
+       return sprintf(p, " pink/%.2f", AMP_AD(vp->amp));
+    case 3:
+       if (dup && vp->carr == dup->carr && vp->amp == dup->amp)
+	  return sprintf(p, "  ::");
+       return sprintf(p, " bell%+.2f/%.2f", vp->carr, AMP_AD(vp->amp));
+    case 4:
+       if (dup && vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
+	  return sprintf(p, "  ::");
+       return sprintf(p, " spin:%.2f%+.2f/%.2f", vp->carr, vp->res, AMP_AD(vp->amp));
+    default:
+       if (vp->typ < -100 || vp->typ > -1)
+	  return sprintf(p, " ERROR");
+       if (dup && vp->typ == dup->typ && 
+	   vp->carr == dup->carr && vp->res == dup->res && vp->amp == dup->amp)
+	  return sprintf(p, "  ::");
+       return sprintf(p, " wave%02d:%.2f%+.2f/%.2f", -1-vp->typ, vp->carr, vp->res, AMP_AD(vp->amp));
+   }
 }
 
 void 
@@ -454,8 +494,10 @@ StrDup(char *str) {
 
 static int time_midnight;
 
+#ifndef MINGW
+// Precalculate midnight to accelerate calcNow()
 void 
-setupMidn() {
+setupMidnight() {
   struct tm *tt;
   time_t tim= time(0);
   tt= localtime(&tim);
@@ -471,13 +513,25 @@ calcNow() {
   if (0 != gettimeofday(&tv, 0)) error("Can't get current time");
   return ((tv.tv_sec - time_midnight) * 1000 + tv.tv_usec / 1000) % H24;
 }
+#else
+void setupMidnight() { }
 
+inline int  
+calcNow() {
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+  return st.wMilliseconds + 1000*st.wSecond + 60000*st.wMinute + 3600000*st.wHour;
+}
+#endif
+
+#if DEBUG_CHK_UTIME
 inline int 
 userTime() {
   struct tms buf;
   times(&buf);
   return buf.tms_utime;
 }
+#endif
 
 //
 //	Simple random number generator.  Generates a repeating
@@ -640,54 +694,81 @@ loop() {
 
 void 
 outChunk() {
-  int off= 0;
+   int off= 0;
+   
+   while (off < out_blen) {
+      int ns= noise2();		// Use same pink noise source for everything
+      int tot1, tot2;		// Left and right channels
+      int val, a;
+      Channel *ch;
+      int *tab;
+      
+      tot1= tot2= 0;
+      
+      ch= &chan[0];
+      for (a= 0; a<N_CH; a++, ch++) switch (ch->typ) {
+       case 0:
+	  break;
+       case 1:	// Binaural tones
+	  ch->off1 += ch->inc1;
+	  ch->off1 &= (ST_SIZ << 16) - 1;
+	  tot1 += ch->amp * sin_table[ch->off1 >> 16];
+	  ch->off2 += ch->inc2;
+	  ch->off2 &= (ST_SIZ << 16) - 1;
+	  tot2 += ch->amp * sin_table[ch->off2 >> 16];
+	  break;
+       case 2:	// Pink noise
+	  val= ns * ch->amp;
+	  tot1 += val;
+	  tot2 += val;
+	  break;
+       case 3:	// Bell
+	  if (ch->off2) {
+	     ch->off1 += ch->inc1;
+	     ch->off1 &= (ST_SIZ << 16) - 1;
+	     val= ch->off2 * sin_table[ch->off1 >> 16];
+	     tot1 += val; tot2 += val;
+	     if (--ch->inc2 < 0) {
+		ch->inc2= out_rate/20;
+		ch->off2 -= 1 + ch->off2 / 12;	// Knock off 10% each 50 ms
+	     }
+	  }
+	  break;
+       case 4:	// Spinning pink noise
+	  ch->off1 += ch->inc1;
+	  ch->off1 &= (ST_SIZ << 16) - 1;
+	  val= (ch->inc2 * sin_table[ch->off1 >> 16]) >> 24;
+	  tot1 += ch->amp * noise_buf[(uchar)(noise_off+128+val)];
+	  tot2 += ch->amp * noise_buf[(uchar)(noise_off+128-val)];
+	  break;
+       default:	// Waveform-based binaural tones
+	  tab= waves[-1 - ch->typ];
+	  ch->off1 += ch->inc1;
+	  ch->off1 &= (ST_SIZ << 16) - 1;
+	  tot1 += ch->amp * tab[ch->off1 >> 16];
+	  ch->off2 += ch->inc2;
+	  ch->off2 &= (ST_SIZ << 16) - 1;
+	  tot2 += ch->amp * tab[ch->off2 >> 16];
+	  break;
+      }
+      
+      out_buf[off++]= tot1 >> 16;
+      out_buf[off++]= tot2 >> 16;
+  }
 
-  while (off < out_blen) {
-    int ns= noise2();		// Use same pink noise source for everything
-    int tot1, tot2;		// Left and right channels
-    int val, a;
-    Channel *ch;
-
-    tot1= tot2= 0;
-
-    ch= &chan[0];
-    for (a= 0; a<N_CH; a++, ch++) switch (ch->typ) {
-     case 1:	// Binaural tones
-       ch->off1 += ch->inc1;
-       ch->off1 &= (ST_SIZ << 16) - 1;
-       tot1 += ch->amp * sin_table[ch->off1 >> 16];
-       ch->off2 += ch->inc2;
-       ch->off2 &= (ST_SIZ << 16) - 1;
-       tot2 += ch->amp * sin_table[ch->off2 >> 16];
-       break;
-     case 2:	// Pink noise
-       val= ns * ch->amp;
-       tot1 += val;
-       tot2 += val;
-       break;
-     case 3:	// Bell
-       if (ch->off2) {
-	 ch->off1 += ch->inc1;
-	 ch->off1 &= (ST_SIZ << 16) - 1;
-	 val= ch->off2 * sin_table[ch->off1 >> 16];
-	 tot1 += val; tot2 += val;
-	 if (--ch->inc2 < 0) {
-	   ch->inc2= out_rate/20;
-	   ch->off2 -= 1 + ch->off2 / 12;	// Knock off 10% each 50 ms
-	 }
-       }
-       break;
-     case 4:	// Spinning pink noise
-       ch->off1 += ch->inc1;
-       ch->off1 &= (ST_SIZ << 16) - 1;
-       val= (ch->inc2 * sin_table[ch->off1 >> 16]) >> 24;
-       tot1 += ch->amp * noise_buf[(uchar)(noise_off+128+val)];
-       tot2 += ch->amp * noise_buf[(uchar)(noise_off+128-val)];
-       break;
+  // Generate debugging amplitude output
+  if (DEBUG_DUMP_AMP) {
+    short *sp= out_buf;
+    short *end= out_buf + out_blen;
+    int max= 0;
+    while (sp < end) {
+       int val= (int)sp[0] + (int)sp[1]; sp += 2;
+       if (val < 0) val= -val;
+       if (val > max) max= val;
     }
-    
-    out_buf[off++]= tot1 >> 16;
-    out_buf[off++]= tot2 >> 16;
+    max /= 328;
+    while (max-- > 0) putc('#', stdout);
+    printf("\n"); fflush(stdout);
   }
 
   // Rewrite buffer for 8-bit mode
@@ -723,6 +804,42 @@ outChunk() {
 void 
 writeOut(char *buf, int siz) {
   int rv;
+
+#ifdef MINGW
+  if (out_fd == -9999) {
+     // Win32 output: write it to a header and send it off
+     MMRESULT rv;
+
+     //debug_win32_buffer_status();
+
+     //while (aud_cnt == BUFFER_COUNT) {
+     //while (aud_head[aud_current]->dwFlags & WHDR_INQUEUE) {
+     while (!(aud_head[aud_current]->dwFlags & WHDR_DONE)) {
+	//debug("SLEEP %d", out_buf_ms / 2 + 1);
+	Sleep(out_buf_ms / 2 + 1);
+	//debug_win32_buffer_status();
+     }
+
+     memcpy(aud_head[aud_current]->lpData, buf, siz);
+     aud_head[aud_current]->dwBufferLength= (DWORD)siz;
+
+     //debug("Output buffer %d", aud_current);
+     rv= waveOutWrite(aud_handle, aud_head[aud_current], sizeof(WAVEHDR));
+
+     if (rv != MMSYSERR_NOERROR) {
+        char buf[255];
+        waveOutGetErrorText(rv, buf, sizeof(buf)-1);
+        error("Error writing a fragment to the audio device:\n  %s", buf);
+     }
+   
+     aud_cnt++; 
+     aud_current++;
+     aud_current %= BUFFER_COUNT;
+
+     return;
+  }
+#endif
+
   while (-1 != (rv= write(out_fd, buf, siz))) {
     if (0 == (siz -= rv)) return;
     buf += rv;
@@ -772,16 +889,20 @@ corrVal(int running) {
   v1= &per->v1[0];
 
   for (a= 0; a<N_CH; a++, ch++, v0++, v1++) {
-    if (ch->v.typ != v0->typ) {
-      switch (ch->v.typ= ch->typ= v0->typ) {
-       case 1:
-	 ch->off1= ch->off2= 0; break;
-       case 3:
-	 ch->off1= ch->off2= 0; break;
-       case 4:
-	 ch->off1= ch->off2= 0; break;
-      }
-    }
+     if (ch->v.typ != v0->typ) {
+	switch (ch->v.typ= ch->typ= v0->typ) {
+	 case 1:
+	    ch->off1= ch->off2= 0; break;
+	 case 2:
+	    break;
+	 case 3:
+	    ch->off1= ch->off2= 0; break;
+	 case 4:
+	    ch->off1= ch->off2= 0; break;
+	 default:
+	    ch->off1= ch->off2= 0; break;
+	}
+     }
     
     switch (ch->v.typ) {
      case 1:
@@ -821,6 +942,21 @@ corrVal(int running) {
        ch->amp= (int)amp;
        ch->inc1= (int)(res / out_rate * ST_SIZ * 65536);
        ch->inc2= (int)(carr * 1E-6 * out_rate * (1<<24) / ST_AMP);
+       break;
+     default:		// Waveform based binaural
+       amp= rat0 * v0->amp + rat1 * v1->amp;
+       carr= rat0 * v0->carr + rat1 * v1->carr;
+       res= rat0 * v0->res + rat1 * v1->res;
+       ch->v.amp= amp;
+       ch->v.carr= carr;
+       ch->v.res= res;
+       ch->amp= (int)amp;
+       ch->inc1= (int)((carr + res/2) / out_rate * ST_SIZ * 65536);
+       ch->inc2= (int)((carr - res/2) / out_rate * ST_SIZ * 65536);
+       if (ch->inc1 > ch->inc2) 
+         ch->inc2= -ch->inc2;
+       else 
+         ch->inc1= -ch->inc1;
        break;
     }
   }
@@ -907,10 +1043,124 @@ setup_device(void) {
 	      out_mode ? 16 : 8, out_rate, info.fragstotal, out_blen/2, out_buf_ms);
   }
 #else // DSP
+#ifdef MINGW
+  // Output using Win32 calls
+  {
+     MMRESULT rv;
+     WAVEFORMATEX fmt;
+     int a;
+
+     fmt.wFormatTag= WAVE_FORMAT_PCM;           
+     fmt.nChannels= 2;
+     fmt.nSamplesPerSec= out_rate;
+     fmt.wBitsPerSample= out_mode ? 16 : 8;
+     fmt.nBlockAlign= 1;
+     fmt.nAvgBytesPerSec= out_rate * 2 * (out_mode ? 2 : 1);
+     fmt.cbSize= 0;
+     aud_handle= NULL;
+
+     // if (MMSYSERR_NOERROR != 
+     //    waveOutOpen(&aud_handle, WAVE_MAPPER, &fmt, 0, 
+     //                0L, WAVE_FORMAT_QUERY))
+     //    error("Windows is rejecting our audio request (%d-bit stereo, %dHz)",
+     //          out_mode ? 16 : 8, out_rate);
+
+     if (MMSYSERR_NOERROR != 
+	 (rv= waveOutOpen(&aud_handle, WAVE_MAPPER, 
+			  (WAVEFORMATEX*)&fmt, (DWORD)win32_audio_callback, 
+			  (DWORD)0, CALLBACK_FUNCTION))) {
+	char buf[255];
+	waveOutGetErrorText(rv, buf, sizeof(buf)-1);
+	error("Can't open audio device (%d-bit stereo, %dHz):\n  %s",
+               out_mode ? 16 : 8, out_rate, buf);
+     }
+
+     if (fmt.nChannels != 2)
+	error("Can't open audio device in stereo");
+     if (fmt.wBitsPerSample != (out_mode ? 16 : 8))
+	error("Can't open audio device in %d-bit mode", out_mode ? 16 : 8);
+     
+     aud_current= 0;
+     aud_cnt= 0;
+
+     for (a= 0; a<BUFFER_COUNT; a++) {
+	char *p= CAlloc(sizeof(WAVEHDR) + BUFFER_SIZE);
+	WAVEHDR *w= aud_head[a]= (WAVEHDR*)p;
+
+	w->lpData= (LPSTR)p + sizeof(WAVEHDR);
+	w->dwBufferLength= (DWORD)BUFFER_SIZE;
+	w->dwBytesRecorded= 0L;
+	w->dwUser= 0;
+	w->dwFlags= 0;
+	w->dwLoops= 0;
+	w->lpNext= 0;
+	w->reserved= 0;
+
+	rv= waveOutPrepareHeader(aud_handle, w, sizeof(WAVEHDR));
+	if (rv != MMSYSERR_NOERROR) {
+	   char buf[255];
+	   waveOutGetErrorText(rv, buf, sizeof(buf)-1);
+	   error("Can't setup a wave header %d:\n  %s", a, buf);
+	}
+	w->dwFlags |= WHDR_DONE;
+     }     
+     
+     out_rate= fmt.nSamplesPerSec;
+     out_bsiz= BUFFER_SIZE;
+     out_blen= out_mode ? out_bsiz/2 : out_bsiz;
+     out_bps= out_mode ? 4 : 2;
+     out_buf= (short*)CAlloc(out_blen * sizeof(short));
+     out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
+     out_buf_ms= out_buf_lo >> 16;
+     out_buf_lo &= 0xFFFF;
+     out_fd= -9999;
+
+     if (!opt_Q)
+	fprintf(stderr, 
+		"Outputting %d-bit audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
+		out_mode ? 16 : 8, out_rate, BUFFER_COUNT, out_blen/2, out_buf_ms);
+  }
+#else // MINGW
   error("Direct output to soundcard not supported on this platform.\n"
 	"Use -o or -O to write raw data, or -Wo or -WO to write a WAV file.");
+#endif // MINGW
 #endif // DSP
 }
+
+//
+//	Audio callback for Win32
+//
+
+#if MINGW
+void CALLBACK
+win32_audio_callback(HWAVEOUT hand, UINT uMsg,     
+		     DWORD dwInstance, DWORD dwParam1, DWORD dwParam2) {
+   switch (uMsg) {
+    case WOM_CLOSE:
+       break;
+    case WOM_OPEN:
+       break;
+    case WOM_DONE:
+       aud_cnt--;
+       //debug("Buffer done (cnt==%d)", aud_cnt);
+       //debug_win32_buffer_status();
+       break;
+   }
+}
+
+int debug_win32_buffer_status() {
+   char tmp[80];
+   char *p= tmp;
+   int a;
+   for (a= 0; a<BUFFER_COUNT; a++) {
+      *p++= (aud_head[a]->dwFlags & WHDR_INQUEUE) ? 'I' : '-';
+      *p++= (aud_head[a]->dwFlags & WHDR_DONE) ? 'D' : '-';
+      *p++= ' ';
+   }
+   p[-1]= 0;
+   debug(tmp);
+}
+#endif
 
 //
 //	Write a WAV header, and setup out_mode if byte-swapping is
@@ -1157,7 +1407,7 @@ correctPeriods() {
 	  if ((fo == 0 || fi == 0) ||		// Fade in/out to silence
 	      (vp->typ != vq->typ) ||		// Different types
 	      ((fo == 1 || fi == 1) &&		// Fade thru, but different pitches
-	       vp->typ == 1 && 
+	       (vp->typ == 1 || vp->typ < 0) && 
 	       (vp->carr != vq->carr || vp->res != vq->res))
 	      ) {
 	    vp->amp= vq->amp= 0;		// To silence
@@ -1173,7 +1423,7 @@ correctPeriods() {
 	  }
 	  else {				// Else smooth transition
 	    vp->amp= vq->amp= (vp->amp + vq->amp) / 2;
-	    if (vp->typ == 1 || vp->typ == 4) {
+	    if (vp->typ == 1 || vp->typ == 4 || vp->typ < 0) {
 	      vp->carr= vq->carr= (vp->carr + vq->carr) / 2;
 	      vp->res= vq->res= (vp->res + vq->res) / 2;
 	    }
@@ -1275,6 +1525,7 @@ voicesEq(Voice *v0, Voice *v1) {
     switch (v0->typ) {
      case 1:
      case 4:
+     default:
        if (v0->amp != v1->amp ||
 	   v0->carr != v1->carr ||
 	   v0->res != v1->res)
@@ -1312,6 +1563,64 @@ readNameDef() {
   *q= 0;
   for (q= p; *q; q++) if (!isalnum(*q) && *q != '-' && *q != '_') 
     error("Bad name \"%s\" in definition, line %d:\n  %s", p, in_lin, lin_copy);
+
+  // Waveform definition ?
+  if (0 == memcmp(p, "wave", 4) && 
+      isdigit(p[4]) &&
+      isdigit(p[5]) &&
+      !p[6]) {
+     int ii= (p[4] - '0') * 10 + (p[5] - '0');
+     int siz= ST_SIZ * sizeof(int);
+     int *arr= (int*)CAlloc(siz);
+     double *dp0= (double*)arr;
+     double *dp1= (double*)(siz + (char*)arr);
+     double *dp= dp0;
+     double dmax= 0, dmin= 1;
+     int np;
+
+     if (waves[ii])
+	error("Waveform %02d already defined, line %d:\n  %s",
+	      ii, in_lin, lin_copy);
+     waves[ii]= arr;
+     
+     while ((p= getWord())) {
+	double dd;
+	char dmy;
+	if (1 != sscanf(p, "%lf %c", &dd, &dmy)) 
+	   error("Expecting floating-point numbers on this waveform definition line, line %d:\n  %s",
+		 in_lin, lin_copy);
+	if (dp >= dp1)
+	   error("Too many samples on line (maximum %d), line %d:\n  %s",
+		 dp1-dp0, in_lin, lin_copy);
+	*dp++= dd;
+	if (dmax < dmin) dmin= dmax= dd;
+	else {
+	   if (dd > dmax) dmax= dd;
+	   if (dd < dmin) dmin= dd;
+	}
+     }
+     dp1= dp;
+     np= dp1 - dp0;
+     if (np < 2) 
+	error("Expecting at least two samples in the waveform, line %d:\n  %s",
+	      in_lin, lin_copy);
+
+     // Adjust to range 0-1
+     for (dp= dp0; dp < dp1; dp++)
+	*dp= (*dp - dmin) / (dmax - dmin);
+
+     sinc_interpolate(dp0, np, arr);
+     
+     if (DEBUG_DUMP_WAVES) {
+	int a;
+	printf("Dumping wave%02d:\n", ii);
+	for (a= 0; a<ST_SIZ; a++)
+	   printf("%d %g\n", a, arr[a] * 1.0 / ST_AMP);
+     }
+     return;
+  } 
+
+  // Must be block or tone-set, then, so put into a NameDef
   nd= (NameDef*)CAlloc(sizeof(NameDef));
   nd->name= StrDup(p);
 
@@ -1350,9 +1659,10 @@ readNameDef() {
   }
 
   // Normal line-definition
-  for (ch= 0; ch < 8 && (p= getWord()); ch++) {
+  for (ch= 0; ch < N_CH && (p= getWord()); ch++) {
     char dmy;
     double amp, carr, res;
+    int wave;
 
     // Interpret word into Voice nd->vv[ch]
     if (0 == strcmp(p, "-")) continue;
@@ -1366,6 +1676,17 @@ readNameDef() {
       nd->vv[ch].carr= carr;
       nd->vv[ch].amp= AMP_DA(amp);
       continue;
+    }
+    if (4 == sscanf(p, "wave%d:%lf%lf/%lf %c", &wave, &carr, &res, &amp, &dmy)) {
+       if (wave < 0 || wave >= 100)
+	  error("Only wave00 to wave99 is permitted at line: %d\n  %s", in_lin, lin_copy);
+       if (!waves[wave])
+	  error("Waveform %02d has not been defined, line: %d\n  %s", wave, in_lin, lin_copy);
+       nd->vv[ch].typ= -1-wave;
+       nd->vv[ch].carr= carr;
+       nd->vv[ch].res= res;
+       nd->vv[ch].amp= AMP_DA(amp);	
+       continue;
     }
     if (3 == sscanf(p, "%lf%lf/%lf %c", &carr, &res, &amp, &dmy)) {
       nd->vv[ch].typ= 1;
@@ -1526,6 +1847,68 @@ readTime(char *p, int *timp) {		// Rets chars consumed, or 0 error
 
   *timp= ((hh * 60 + mm) * 60 + ss) * 1000;
   return nn;
+}
+
+//
+//	Takes a set of points and repeats them twice, inverting the
+//	second set, and then interpolates them using a periodic sinc
+//	function (see http://www-ccrma.stanford.edu/~jos/resample/)
+//	and writes them to arr[] in the same format as the sin_table[].
+//
+
+void sinc_interpolate(double *dp, int np, int *arr) {
+   double *sinc;	// Temporary sinc-table
+   double *out;		// Temporary output table
+   int a, b;
+   double dmax, dmin;
+   double adj, off;
+
+   // Generate a modified periodic sin(x)/x function to be used for
+   // each of the points.  Really this should be sin(x)/x modified
+   // by the sum of an endless series.  However, this doesn't
+   // converge very quickly, so to save time I'm approximating this
+   // series by 1-4*t*t where t ranges from 0 to 0.5 over the first
+   // half of the periodic cycle.  If you do the maths, this is at
+   // most 5% out.  This will have to do - it's smooth, and I don't
+   // know enough maths to make this series converge quicker.
+   sinc= CAlloc(ST_SIZ * sizeof(double));
+   sinc[0]= 1.0;
+   for (a= ST_SIZ/2; a>0; a--) {
+      double tt= a * 1.0 / ST_SIZ;
+      double t2= tt*tt;
+      double adj= 1 - 4 * t2;
+      double xx= 2 * np * 3.14159265358979323846 * tt;
+      double vv= adj * sin(xx) / xx;
+      sinc[a]= vv;
+      sinc[ST_SIZ-a]= vv;
+   }
+   
+   // Build waveform into buffer
+   out= CAlloc(ST_SIZ * sizeof(double));
+   for (b= 0; b<np; b++) {
+      int off= b * ST_SIZ / np / 2;
+      double val= dp[b];
+      for (a= 0; a<ST_SIZ; a++) {
+	 out[(a + off)&(ST_SIZ-1)] += sinc[a] * val;
+	 out[(a + off + ST_SIZ/2)&(ST_SIZ-1)] -= sinc[a] * val;
+      }
+   }
+
+   // Look for maximum for normalization
+   dmax= dmin= 0;
+   for (a= 0; a<ST_SIZ; a++) {
+      if (out[a] > dmax) dmax= out[a];
+      if (out[a] < dmin) dmin= out[a];
+   }
+
+   // Write out to output buffer
+   off= -0.5 * (dmax + dmin);
+   adj= ST_AMP / ((dmax - dmin) / 2);
+   for (a= 0; a<ST_SIZ; a++)
+      arr[a]= (int)((out[a] + off) * adj);
+
+   free(sinc);
+   free(out);
 }
 
 // END //

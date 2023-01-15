@@ -1,11 +1,17 @@
-Here is a brief overview of the files here:
+Here is a brief overview of some of the files here:
 
-sbagen.c	The source code
-mk		A short script to build it using GCC
-mk-ansi		A short script to build it on a plain ANSI C compiler
-mk-nodevdsp	A short script to build using GCC when /dev/dsp is not available
 sbagen.txt	Full documentation and release notes
-theory*.txt	Some notes from my own experimentation - comments welcome !
+sbagen.exe	The Win32 executable (ZIP distribution only)
 prog-*		Some full (24-hour) example sequences
 t-*		Some quick (immediate) test tone-sets
+p-*		A couple of Perl-scripts that generate sequences
+focus.txt	Some notes on the scripts that were derived from reported 
+		 Monroe Institute focus levels
+theory*.txt	Some notes from my own experimentation
+
+sbagen.c	The source code
+COPYING		License (GNU General Public Licence)
+mk		A short script to build it using GCC on UNIX
+mk-ansi		A short script to build it on a plain ANSI C compiler
+mk-nodevdsp	A short script to build using GCC when /dev/dsp is not available
 

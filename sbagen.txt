@@ -1,11 +1,11 @@
 SBaGen - Sequenced BinAural Generator
 -------------------------------------
 
-This is a utility, released under the GPL, that generates pink noise
-and binaural tones (to /dev/dsp) in real-time according to a 24-hour
-programmed sequence read from a file.  It can also be used to play a
-sequence immediately, rather than according to the clock, or even a
-combination of the two.
+This is a utility, released under the GPL (see the file COPYING), that
+generates pink noise and binaural tones through your soundcard in
+real-time according to a 24-hour programmed sequence read from a file.
+It can also be used to play a sequence immediately, rather than
+according to the clock, or even a combination of the two.
 
 The original idea was to program a set of tones to play overnight as I
 slept, hoping to improve dreaming, and dream-recall.  This way, I can
@@ -22,12 +22,13 @@ USE AND EXPERIMENT AT YOUR OWN RISK !
 If you make any changes or improvements to the code, let me know so
 that I can keep a master copy of all the best bits.  Also, if you come
 up with any interesting tone-sets or sequences that you would like to
-share, along with their story, let me know.  I'm considering
-collecting people's experiences together onto the site, if there is
-enough interest.
+share, along with their story, let me know or post them on the mailing
+list (see http://sbagen.sf.net/).  I'm considering collecting people's
+experiences together onto the site, if there is enough interest.
 
-Jim Peters, Jan 1999                           <jim@aguazul.demon.co.uk>
-                                 <http://www.aguazul.demon.co.uk/bagen/>
+Jim Peters, Jan 1999                                     <jim@uazu.net>
+ (updated Sept 2001)                      <http://www.uazu.net/sbagen/>
+
 
 
 Theory
@@ -113,14 +114,22 @@ some of his experiences on Monroe Institute workshops in his first
 book "Travelling with Power", although I've not read it (yet).
 
 
+
 Building the utility
 --------------------
 
-There is a little script `mk' which compiles the executable with the
-correct options.  This is assuming GCC on Linux-i386.  If you're using
-something else, please check and adjust as necessary.  There is also a
+Windows users don't need to build anything - sbagen.exe is pre-built
+for you, so skip ahead to `invocation' below.
+
+The Linux executable can be built using the little `mk' script:
+
+  ./mk
+
+The `mk' script assumes GCC on Linux-i386.  If you're using something
+else, please check it and adjust it as necessary.  There is also a
 script `mk-ansi' which strips out non-ANSI C stuff before compiling,
-which may work if you don't have GCC.
+which may work if you don't have GCC.  The other `mk-*' scripts cover
+other possibilities - see the comments in the files for more details.
 
 At the moment the code handles output to a stereo /dev/dsp device
 using either 16-bit signed or 8-bit unsigned samples.  Hopefully this
@@ -129,27 +138,34 @@ you will either have to modify the code yourself, or suggest
 modifications to me.  You can also output to a file, or to standard
 output, if you wish - see below.
 
-Note that other heavy jobs running may take CPU time away from the
-sound-generation, and cause gaps in the output.  You could try
-adjusting priorities with nice and renice to improve the situation.
+Note that on low-spec machines, any heavy jobs running may take CPU
+time away from the sound-generation, and cause gaps in the output.
+You could try adjusting priorities with nice and renice to improve the
+situation.
 
-On my Pentium-75, I can generate output at 44100 Hz on all 8 channels,
-and still only use 66% CPU-time, so even with a very old machine, you
-should be able to get some output, even if this means lowering the
-output rate using the -r option.
+On my old Pentium-75, I could generate 16-bit 44100Hz output on all 8
+channels, and still only use 66% CPU-time, so even with very old
+machines, you should be able to get some output, even if this means
+lowering the output rate using the -r option.
 
-Once built, you can test the utility quickly using some of the t-*
-scripts which generate various different tone-sets.  
+Once built, on UNIX you can test the utility quickly using some of the
+t-* scripts which generate various different tone-sets.
 
-One thing to note - whether you play these binaural beats through
-headphones (as recommended by the Monroe Institute), or through
-speakers (as I've been using them), play them quietly.  From my
-experience, I can say that playing them loud doesn't really help - it
-just gives you a headache.
 
 
 Invocation
 ----------
+
+One quick thing to note before we start - whether you play these
+binaural beats through headphones (as recommended by the Monroe
+Institute), or through speakers (as I've been using them), play them
+relatively quietly.  From my experience I can say that playing them
+too loud doesn't improve the effect at all - it just gives me a
+headache.
+
+So, here we go.  Windows users will need to fire up a DOS Prompt and
+CD to the directory in which SBaGen was unzipped.  The following
+example commands should be typed at the prompt.
 
 >> sbagen
 
@@ -158,29 +174,34 @@ full list of options.  Check this for any new features.
  
 >> sbagen prog-1
 
-This runs the sequence in prog-1, starting playing whatever should be
-playing at the current moment, according to the clock time.  The
-status-line at the bottom of the screen shows the current time, and
-currently-playing tones/noise.  The two lines immediately above show
-the period of the sequence which is being played - these lines scroll
-up the screen as one period moves into the next.
+This runs the sequence in file `prog-1', starting playing whatever
+should be playing at the current moment, according to the clock time.
+The status-line at the bottom of the screen shows the current time,
+and currently-playing tones/noise.  The two lines immediately above
+show the period of the sequence which is being played - these lines
+scroll up the screen as one period moves into the next.
 
-To test a sequence (without waiting the full 24 hours), run with the
--q option:
+For Windows users, the utility can be stopped by pressing Ctrl-C.
+This works for UNIX too, naturally - it's just that UNIX users mostly
+already know about this !
+
+To test a sequence (without waiting the full 24 hours for it to play
+through), run with the -q option:
 
 >> sbagen -q 480 prog-1
 
-This runs the sequence at 480 times the normal speed.  This is quite
-useful to check that a new sequence is going to do what you expect it
-to do.
+This example runs the sequence at 480 times the normal speed.  This is
+quite useful to check that a new sequence is going to do what you
+expect it to do.
 
-To check that SBaGen has interpreted your sequence correctly, use the
--D option, which dumps a listing of the interpreted sequence instead
-of playing it:
+To check that SBaGen has interpreted your sequence-file correctly, use
+the -D option, which dumps a listing of the interpreted sequence
+instead of playing it:
 
 >> sbagen -D prog-1
 
-To test a particular sound continuously, use the -i immediate option:
+To quickly test a particular tone-set continuously, use the -i
+immediate option:
 
 >> sbagen -i pink/40 100+1.5/20 200-4/36 400+8/2
 
@@ -191,13 +212,15 @@ amplitudes (20, 36 and 2).  This combination is supposedly something
 like "body-asleep, brain-awake", assuming I've reproduced it
 correctly.
 
-While you're at it, try the alternate `spin' effect:
+While you're at it, try the alternate `spin' effect.  Not everyone
+likes this, but in any case it's there if you want to use it:
 
 >> sbagen -i spin:300+4.2/80
 
-To run at a lower output rate, use the -r option.  The tones still
-come out really well even at 8000Hz, on my sound card at least,
-although the noise suffers.  For example:
+If you're having trouble with your soundcard or CPU usage, use the -r
+option to run at a lower output rate.  The tones still come out really
+well even at 8000Hz, on my sound card at least, although the noise
+suffers.  For example:
 
 >> sbagen -r 8000 -i pink/40 100+1.5/20 200+6/30
 
@@ -206,9 +229,25 @@ the -b option to select 8-bit output, for example:
 
 >> sbagen -b 8 -i pink/40 100+1.5/20 200+6/30
 
-Note that all the executable test tone-sets (t-*) and programs
-(prog-*) accept options and pass them on to SBaGen, so you can use the
-same options with these as well.
+For UNIX, you'll find that all the executable tone-set scripts (t-*)
+accept additional options and pass them onto SBaGen, so you can use
+the same options with these as well.  Try out some of these scripts to
+get an idea of some of the possibilities.
+
+For Windows, the tone-set files (t-*) are still useful - read them
+using EDIT or NotePad or something.  You should be able to pick out
+the tone-sets to try out using `sbagen -i ...'.
+
+For both UNIX and Windows, the sequence files (prog-*) can be used in
+the same way:
+
+>> sbagen prog-whatever
+
+Have a play with these sequences.  Many of them are designed to run at
+night.  You can play them immediately using `-q 1':
+
+>> sbagen -q 1 prog-whatever
+
 
 
 Outputting to a pipe or a file
@@ -226,8 +265,8 @@ frequencies and timings will be out.
 
 The -o option can also be used to output directly to a file.  In both
 cases headerless raw data is output (to write a WAV file, see the -W
-option below).  For example, to pipe to bplay, you could use the
-following:
+option below).  For example, to pipe to bplay under UNIX, you could
+use the following:
 
 >> sbagen -r 8000 -O -i 100+0.92/30 200+4.2/15 | bplay -S -s 8000 -b 16
 
@@ -277,8 +316,14 @@ for slowly changing tone-sets, but you may wish to adjust this value
 according to your needs.
 
 
+
 Sequence-file format
 --------------------
+
+This section describes the format of the sequence files (the prog-*
+files, for example).  You'll need this if you want to modify these
+files, or create your own sequences.  For Windows users, you can edit
+these files using EDIT or NotePad (or any simple text editor).
 
 Within the sequence file, blank lines, and any leading/trailing white
 space are ignored.  Comments are introduced with a `#', and extend to
@@ -290,8 +335,8 @@ There are several types of entries that may appear in the file:
   * Time-sequence lines
   * Block definition lines
 
-These are described below.  The example sequence-files are useful to
-see how all these work together.
+These are described below.  The example sequence-files (prog-*) are
+useful to see how all these work together.
 
 * The tone-set definition line.  This takes the form of:
 
@@ -306,17 +351,19 @@ see how all these work together.
   The name starts with a letter, and may continue with letters,
   numbers, `_' or `-'.  Following the colon is a list of one or more
   tone-specifications.  There are a maximum of 8 of these.  There are
-  four types:
+  five types:
 
       -					# Channel not in use
       pink/<amp>			# Pink noise
       <carrier><sign><freq>/<amp>	# Binaural tones
       bell+<freq>/<amp>                 # Bell sound
       spin:<width>+<freq>/<amp>		# Spinning phase shifted pink noise
+      wave<num>:<carrier><sign><freq>/<amp> 	# Binaural tones using a user- 
+						# defined waveform (see later)
 
   The amplitudes are expressed on a scale 0-100.  The total of all the
   amplitudes <amp> in a tone-set should not exceed 100, or else there
-  will be distortion on output as the waveforms will be clipped.
+  will be distortion on output as the waveforms are clipped.
 
   The pink noise is probably not 100% pure pink noise - but it is
   fairly pink, with everything from rumbling to hissing, and it
@@ -338,7 +385,7 @@ see how all these work together.
   decides which channel carries the higher frequency.  I don't think
   this matters, but in case it does, you can change it here.  So, for
   example, 100+4/20 generates tones of 102 and 98 Hz, whereas 100-4/20
-  generates tones of 98 and 102 Hz.
+  generates tones of 98 and 102 Hz. 
 
   The bell sound can be used to give cues and signals during the
   sequence.  A simple `ping' is generated at the given frequency at
@@ -351,6 +398,9 @@ see how all these work together.
   in microseconds.  Values from 100 to 500 seem good to me, although
   you might want to experiment with this.  The second number is the
   beat frequency and the third is the amplitude, as above.
+
+  Binaural tones generated using wave<num> work just the same way as
+  normal binaural tones.  See the section later on for details.
 
   Once a tone-set has been defined, it may be used in time-sequence
   lines.
@@ -471,7 +521,7 @@ see how all these work together.
   takes the form:
 
     <block-name>: {
-    <time-sequence-line>
+      <time-sequence-line>
       ::
     }
 
@@ -487,7 +537,7 @@ see how all these work together.
   because when the block is called on, all the times will be combined
   with the time-spec from the calling line.
 
-  For example:
+  For example, using the above definition:
 
     NOW theta-burst
 
@@ -506,3 +556,119 @@ see how all these work together.
     +01:00+00:10 off
 
 --------------------------------------------------------------------------------
+
+
+
+EXPERIMENTAL FEATURE: User-defined waveforms
+--------------------------------------------
+
+This is a more complex form of binaural synthesis, and right at this
+moment, I'm not sure whether it works or not, so this section is only
+for die-hard bleeding-edge hackers and experimenters.  The code is in
+place to do this synthesis, but it might still have bugs or other
+problems.  If you're still interested, read on ...
+
+The purest form of binaural beat synthesis is based on two sine waves
+of slightly differing frequency.  The interference between these two
+within the brain generates a resultant wave with a slow modulation.
+Assuming the interference within the brain is similar to normal wave
+interference, then the resultant amplitude wave is shaped by what
+looks like a full-wave rectified sine wave (like the +ve half of a
+sine wave repeated endlessly).
+
+There is a line of thinking that suggests that if we replace this
+amplitude envelope with one based on the shape of a measured
+brain-wave, then we should be able to reproduce that brain-wave in the
+brain - i.e. we play a measured alpha wave to entrain the brain
+precisely to an alpha wave.  Does this work ?  I really don't know.
+
+This is how it is used in the sequence-file.  You provide the shape of
+the brain-wave to the program in a waveform definition line:
+
+  wave<2-digits>: <list of samples>
+
+There can be at most 100 waveforms defined in a sequence, numbered 00
+to 99.  For example:
+
+  wave00: 0 5.5 10 8 10 7.2 4.7 2 
+
+The samples are values from the waveform shape taken at regular
+intervals over one cycle.  They can be in any units you wish -
+floating point numbers, negative, whatever - and there may be as many
+samples as you wish (currently only limited by line length).  They
+will be rescaled to fit between the amplitudes of 0% and 100% and
+smoothed using a sin(x)/x function.  See here for more details on the
+smoothing used:
+
+  http://www-ccrma.stanford.edu/~jos/resample/
+
+This waveform now becomes the amplitude envelope of any binaural tones
+generated from it:
+
+  wave00:200+4/50
+
+This is just the same as 200+4/50, except it uses the new waveform for
+the amplitude envelope.
+
+That's all you need to know to be able to use it.  All you have to do
+now (according to the theory, at least) is to go and measure some
+waveforms - off the 'net if like most of us you don't have an EEG -
+feed them into waveNN: lines, and then play them at appropriate
+beat-frequencies.
+
+Well, that's the theory, but not everything seems to be working
+according to plan from my experiments.  Here is the basis on which the
+code works to generate the tones:
+
+If you take the 0-100% scaled and smoothed amplitude waveform, and
+draw it twice, and invert the second version, you have a wave that can
+be played at audio frequencies.  If you play this in the left ear at
+102Hz (for example), and in the right ear you play the same thing at
+98Hz BUT WITH THE SAMPLE REVERSED, then in theory you should get the
+correct amplitude envelope.  Here is the mathematical basis for this
+(from the mailing list):
+
+> Let's say we have a brain-wave waveform of f(T) (T is theta),
+> expressed as a fourier series (using complex maths because it's
+> easier):
+> 
+>   f(T) = sigma(n= -inf to +inf) ( Cn . e^(inT) )
+> 
+> What we want to end up with is a resultant function something like
+> this:
+> 
+>   g(t) = sigma(n= -inf to +inf) ( Cn . e^(inbt) . 2 cos nat )
+> 
+> where `a' is the resultant carrier frequency (in rad/s here), and `b'
+> is the beat frequency.  This means that the phase information is
+> connected with the beat waveform, and the phase of the carriers are
+> fixed.  The factor 2 comes in handy lower down:
+> 
+>   g(t) = sigma(n= -inf to +inf) ( Cn . e^(inbt) . (e^(inat) + e^(-inat)) )
+> 
+>   g(t) = sigma(n= -inf to +inf) ( Cn . e^(in(b+a)t) + Cn . e^(in(b-a)t) )
+> 
+>   g(t) = f((b+a)t) + f((b-a)t)
+> 
+> So we just need to play the original waveform at frequencies (b+a) and
+> (b-a).  But `b' will typically be small (1-30Hz), and `a' will be
+> large (100-1500Hz).  So (b-a) is negative, which means playing the
+> sample backwards.
+> 
+> So if we play the required brainwave forwards at the higher
+> frequency, and backwards at the lower frequency, it should all come
+> out with what we want.
+
+However, with my experiments I don't get the expected resultant
+amplitude envelope.  I get bits of it, but not a perfect result.
+What's going on, I don't know.  Anyway, if you're up for experimenting
+with this, at least the code is there now for you to play with and
+modify.  If you make any progress, let me have the improved code, and
+I'll include it in the next release.
+
+Cheers -
+
+Jim
+
+--------------------------------------------------------------------------------
+

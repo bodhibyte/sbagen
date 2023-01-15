@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Cross-compiling to Win32 using MinGW32.  This is not impossible, but
+# not dead easy either.  Much as I wanted to get a Win32 version
+# working, I couldn't stand the impossibly unusable DOS shell, so
+# cross-compilation was the only alternative.  The bits you need can
+# all be found on the SDL home page:
+#
+#   http://www.libsdl.org/
+#   http://www.libsdl.org/Xmingw32/
+#
+# The second link is important because it is not directly and
+# obviously linked off the main pages.  It contains the downloads for
+# the MinGW cross-compiler.  These are pre-built, saving you lots more
+# messing around, although check out the MinGW pages for the original
+# source:
+#
+#   http://mingw.sourceforge.net/
+#
+# Probably if you're more comfortable with the DOS shell than I am,
+# then you'll make more progress using the native MinGW compiler and the
+# standard Win32 SDL downloads.  I can't help you much with this, though.
+
+export PATH=/usr/local/cross-tools/bin:/usr/local/cross-tools/i386-mingw32msvc/bin:$PATH
+
+#OPT="-g -O2 -Wall"
+OPT="-s -O3"
+
+LIB="-L/usr/local/cross-tools/i386-mingw32msvc/lib -lmingw32 -lwinmm"
+INC="-I/usr/local/cross-tools/i386-mingw32msvc/include"
+
+gcc $OPT $INC -DMINGW -DNO_ANSI_TTY -DNO_DEV_DSP -o sbagen.exe sbagen.c $LIB
+
+cp sbagen.exe ~/win/jim
+
+
+
