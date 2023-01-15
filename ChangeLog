@@ -15,8 +15,14 @@
 	Improved synchronisation with real-time
 	Added bell sound
 
+1.0.4	Added -W option to write WAV file headers to files or stdout
+	Added -S and -E options to run sequence as a script
+	Preprocessor lines added to support compilation without direct /dev/dsp output
+	-L option now outputs exactly the right length, with either raw or WAV output
+
 TO-DO	Allow multiple simultaneous sequences to run, overlaying one another
 	Tone-set option to gently oscillate the beat frequency up and down
 	Fade between tone-sets according to joystick port input
 	Allow specification of fade-in-out intervals other than 30 secs
 	Open /dev/dsp twice, and set buffers not-too-long and not-too-short
+	Option to output a loop-able file of exactly the right length for -i option

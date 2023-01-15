@@ -17,7 +17,11 @@
 //	If you really don't have a copy of the GNU GPL, I'll send you one.
 //	
 
-#define VERSION "1.0.3"
+#define VERSION "1.0.4"
+
+#ifndef NO_DEV_DSP
+#define DSP		// Define to use /dev/dsp, or comment out if not available
+#endif
 
 #include <stdio.h>
 #include <math.h>
@@ -35,7 +39,9 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/times.h>
+#ifdef DSP
 #include <sys/soundcard.h>
+#endif
 
 typedef struct Channel Channel;
 typedef struct Voice Voice;
@@ -73,6 +79,8 @@ void error(char *fmt, ...) ;
 int sprintTime(char *, int);
 int sprintVoice(char *, Voice *, Voice *);
 int readTime(char *, int *);
+void writeWAV();
+void writeOut(char *, int);
 
 void 
 usage() {
@@ -91,9 +99,14 @@ usage() {
 	"          -b bits   Select the number bits for output (8 or 16, default 16)\n"
 	"          -L time   Select the length of time (hh:mm or hh:mm:ss) to output\n"
 	"                     for.  Default is to output forever.\n"
+	"          -S        Output from the first tone-set in the sequence (Start),\n"
+	"                     instead of working in real-time.  Equivalent to `-q 1'.\n"
+	"          -E        Output until the last tone-set in the sequence (End),\n"
+	"                     instead of outputting forever.\n"
 	"\n"
 	"          -o file   Output raw data to the given file instead of /dev/dsp\n"
 	"          -O        Output raw data to the standard output\n"
+	"          -W        Output a WAV-format file instead of raw data\n"
 	);
 }
 
@@ -149,12 +162,13 @@ NameDef *nlist;			// Full list of name definitions
 
 short *out_buf;			// Output buffer
 int out_bsiz;			// Output buffer size (bytes)
-int out_blen;			// Output buffer length (samples)
+int out_blen;			// Output buffer length (samples) (1.0* or 0.5* out_bsiz)
+int out_bps;			// Output bytes per sample (2 or 4)
 int out_buf_ms;			// Time to output a buffer-ful in ms
 int out_buf_lo;			// Time to output a buffer-ful, fine-tuning in ms/0x10000
 int out_fd;			// Output file descriptor
 int out_rate= 44100;		// Sample rate
-int out_mode= 0;		// Output mode: 0 short[2], 1 unsigned char[2]
+int out_mode= 1;		// Output mode: 0 unsigned char[2], 1 short[2], 2 swapped short[2]
 FILE *in;			// Input sequence file
 int in_lin;			// Current input line
 char buf[4096];			// Buffer for current line
@@ -166,14 +180,18 @@ char *lin_copy;			// Copy of input line
 int ns_tbl[1<<NS_BIT];
 int ns_off= 0;
 
-int fast_tim0= -1;		// First time mentioned in the sequence file (for -q option)
+int fast_tim0= -1;		// First time mentioned in the sequence file (for -q and -S option)
+int fast_tim1= -1;		// Last time mentioned in the sequence file (for -E option)
 int fast_mult= 0;		// 0 to sync to clock (adjusting as necessary), or else sync to
 				//  output rate, with the multiplier indicated
+int byte_count= -1;		// Number of bytes left to output, or -1 if unlimited
 
 int opt_D;
 int opt_Q;
 int opt_i;
-int opt_q;
+int opt_S;
+int opt_E;
+int opt_W;
 int opt_O;
 int opt_L= -1;			// Length in ms, or -1
 char *opt_o;			// File name to output to, or 0
@@ -217,11 +235,18 @@ main(int argc, char **argv) {
      case 'D': opt_D= 1; break;
      case 'Q': opt_Q= 1; break;
      case 'i': opt_i= 1; break;
-     case 'O': opt_O= 1; 
+     case 'E': opt_E= 1; break;
+     case 'S': opt_S= 1;
+       if (!fast_mult) fast_mult= 1; 		// Don't try to sync with real time
+       break;
+     case 'O': opt_O= 1;
+       if (!fast_mult) fast_mult= 1; 		// Don't try to sync with real time
+       break;
+     case 'W': opt_W= 1;
        if (!fast_mult) fast_mult= 1; 		// Don't try to sync with real time
        break;
      case 'q': 
-       opt_q= 1;
+       opt_S= 1;
        if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &fast_mult, &dmy)) usage();
        if (fast_mult < 1) fast_mult= 1;
        break;
@@ -231,7 +256,7 @@ main(int argc, char **argv) {
      case 'b':
        if (argc-- < 1 || 1 != sscanf(*argv++, "%d %c", &val, &dmy)) usage();
        if (val != 8 && val != 16) usage();
-       out_mode= (val == 8) ? 1 : 0;
+       out_mode= (val == 8) ? 0 : 1;
        break;
      case 'o':
        if (argc-- < 1) usage();
@@ -249,6 +274,11 @@ main(int argc, char **argv) {
   }
 
   if (argc < 1) usage();
+
+  if (opt_W && !opt_o && !opt_O)
+    error("Use -o or -O with the -W option");
+  if (opt_W && opt_L < 0 && !opt_E)
+    error("Use -L or -E with -W option to give the length of the WAV file");
 
   if (opt_i) {
     // Immediate mode
@@ -423,8 +453,6 @@ userTime() {
 //	Based on ZX Spectrum random number generator:
 //	  seed= (seed+1) * 75 % 65537 - 1
 //
-//	Except we've changed to 3220 instead of 75
-//
 
 #define RAND_MULT 75
 
@@ -515,8 +543,14 @@ loop() {
 
   setup_device();
   cnt= 1 + 1999 / out_buf_ms;	// Update every 2 seconds or so
-  now= opt_q ? fast_tim0 : calcNow();
+  now= opt_S ? fast_tim0 : calcNow();
   err= fast ? out_buf_ms * (fast_mult - 1) : 0;
+  if (opt_L)
+    byte_count= (int)(opt_L * 0.001 * out_rate) * out_bps;
+  if (opt_E)
+    byte_count= (int)(t_per0(now, fast_tim1) * 0.001 * out_rate) * out_bps;
+  if (opt_W)
+    writeWAV();
 
   if (!opt_Q) fprintf(stderr, "\n");
   corrVal(0);		// Get into correct period
@@ -532,7 +566,6 @@ loop() {
       if (now_lo >= 0x10000) { ms_inc += now_lo >> 16; now_lo &= 0xFFFF; }
       now += ms_inc;
       if (now > H24) now -= H24;
-      if (opt_L >= 0 && (opt_L -= ms_inc) < 0) exit(0);		// All done
       if (vfast && (c&1)) status(0);
     }
 
@@ -614,16 +647,44 @@ outChunk() {
   }
 
   // Rewrite buffer for 8-bit mode
-  if (out_mode) {
+  if (out_mode == 0) {
     short *sp= out_buf;
     short *end= out_buf + out_blen;
     char *cp= (char*)out_buf;
     while (sp < end) *cp++= (*sp++ >> 8) + 128;
   }
 
-  if (out_bsiz != write(out_fd, out_buf, out_bsiz)) 
-    error("Output error");
+  // Rewrite buffer for 16-bit byte-swapping
+  if (out_mode == 2) {
+    char *cp= (char*)out_buf;
+    char *end= (char*)(out_buf + out_blen);
+    while (cp < end) { char tmp= *cp++; cp[-1]= cp[0]; *cp++= tmp; }
+  }
+
+  // Check and update the byte count if necessary
+  if (byte_count > 0) {
+    if (byte_count <= out_bsiz) {
+      writeOut((char*)out_buf, byte_count);
+      exit(0);		// All done
+    }
+    else {
+      writeOut((char*)out_buf, out_bsiz);
+      byte_count -= out_bsiz;
+    }
+  }
+  else
+    writeOut((char*)out_buf, out_bsiz);
 } 
+
+void 
+writeOut(char *buf, int siz) {
+  int rv;
+  while (-1 != (rv= write(out_fd, buf, siz))) {
+    if (0 == (siz -= rv)) return;
+    buf += rv;
+  }
+  error("Output error");
+}
 
 //
 //	Correct values and types according to current period, and
@@ -705,10 +766,6 @@ corrVal(int running) {
 
 void 
 setup_device(void) {
-  int stereo, rate, fragsize, numfrags, enc;
-  int afmt_req, afmt;
-  audio_buf_info info;
-  int test= 1;
 
   // Handle output to files and pipes
   if (opt_O || opt_o) {
@@ -720,58 +777,106 @@ setup_device(void) {
     }
     out_blen= out_rate / 5;		// 10 fragments a second
     while (out_blen & (out_blen-1)) out_blen &= out_blen-1;		// Make power of two
-    out_bsiz= out_blen * (out_mode ? 1 : 2);
+    out_bsiz= out_blen * (out_mode ? 2 : 1);
+    out_bps= out_mode ? 4 : 2;
     out_buf= (short*)CAlloc(out_blen * sizeof(short));
     out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
     out_buf_ms= out_buf_lo >> 16;
     out_buf_lo &= 0xFFFF;
 
-    if (!opt_Q)
+    if (!opt_Q && !opt_W)		// Informational message for opt_W is written later
       fprintf(stderr, 
-	      "Outputting %d-bit audio at %d Hz with %d-sample blocks, %d ms per block\n",
-	      out_mode ? 8 : 16, out_rate, out_blen/2, out_buf_ms);
+	      "Outputting %d-bit raw audio data at %d Hz with %d-sample blocks, %d ms per block\n",
+	      out_mode ? 16 : 8, out_rate, out_blen/2, out_buf_ms);
     return;
   }
 
+#ifdef DSP
   // Normal /dev/dsp output
-  if (0 > (out_fd= open("/dev/dsp", O_WRONLY)))
-    error("Can't open /dev/dsp, errno %d", errno);
-  
-  afmt= afmt_req= (out_mode ? AFMT_U8 : 
-		   ((char*)&test)[0] ? AFMT_S16_LE : AFMT_S16_BE);
-  stereo= 1;
-  rate= out_rate;
-  fragsize= 14;
-  numfrags= 4;	
-
-  enc= (numfrags<<16) | fragsize;
-
-  if (0 > ioctl(out_fd, SNDCTL_DSP_SETFRAGMENT, &enc) ||
-      0 > ioctl(out_fd, SNDCTL_DSP_SAMPLESIZE, &afmt) ||
-      0 > ioctl(out_fd, SNDCTL_DSP_STEREO, &stereo) ||
-      0 > ioctl(out_fd, SNDCTL_DSP_SPEED, &rate))
-    error("Can't configure /dev/dsp, errno %d", errno);
-
-  if (afmt != afmt_req) 
-    error("Can't open device in %d-bit mode", out_mode ? 8 : 16);
-  if (!stereo)
-    error("Can't open device in stereo");
+  {
+    int stereo, rate, fragsize, numfrags, enc;
+    int afmt_req, afmt;
+    int test= 1;
+    audio_buf_info info;
+    if (0 > (out_fd= open("/dev/dsp", O_WRONLY)))
+      error("Can't open /dev/dsp, errno %d", errno);
     
-  out_rate= rate;
+    afmt= afmt_req= ((out_mode == 0) ? AFMT_U8 : 
+		     ((char*)&test)[0] ? AFMT_S16_LE : AFMT_S16_BE);
+    stereo= 1;
+    rate= out_rate;
+    fragsize= 14;
+    numfrags= 4;	
+    
+    enc= (numfrags<<16) | fragsize;
+    
+    if (0 > ioctl(out_fd, SNDCTL_DSP_SETFRAGMENT, &enc) ||
+	0 > ioctl(out_fd, SNDCTL_DSP_SAMPLESIZE, &afmt) ||
+	0 > ioctl(out_fd, SNDCTL_DSP_STEREO, &stereo) ||
+	0 > ioctl(out_fd, SNDCTL_DSP_SPEED, &rate))
+      error("Can't configure /dev/dsp, errno %d", errno);
+    
+    if (afmt != afmt_req) 
+      error("Can't open device in %d-bit mode", out_mode ? 16 : 8);
+    if (!stereo)
+      error("Can't open device in stereo");
+    
+    out_rate= rate;
+    
+    if (-1 == ioctl(out_fd, SNDCTL_DSP_GETOSPACE, &info))
+      error("Can't get audio buffer info, errno %d", errno);
+    out_bsiz= info.fragsize;
+    out_blen= out_mode ? out_bsiz/2 : out_bsiz;
+    out_bps= out_mode ? 4 : 2;
+    out_buf= (short*)CAlloc(out_blen * sizeof(short));
+    out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
+    out_buf_ms= out_buf_lo >> 16;
+    out_buf_lo &= 0xFFFF;
+    
+    if (!opt_Q)
+      fprintf(stderr, 
+	      "Outputting %d-bit audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
+	      out_mode ? 16 : 8, out_rate, info.fragstotal, out_blen/2, out_buf_ms);
+  }
+#else // DSP
+  error("Direct output to soundcard not supported on this platform.\n"
+	"Use -o or -O to write raw data, or -Wo or -WO to write a WAV file.");
+#endif // DSP
+}
 
-  if (-1 == ioctl(out_fd, SNDCTL_DSP_GETOSPACE, &info))
-    error("Can't get audio buffer info, errno %d", errno);
-  out_bsiz= info.fragsize;
-  out_blen= out_mode ? out_bsiz : out_bsiz / 2;
-  out_buf= (short*)CAlloc(out_blen * sizeof(short));
-  out_buf_lo= (int)(0x10000 * 1000.0 * 0.5 * out_blen / out_rate);
-  out_buf_ms= out_buf_lo >> 16;
-  out_buf_lo &= 0xFFFF;
+//
+//	Write a WAV header, and setup out_mode if byte-swapping is
+//	required.  `byte_count' should have been set up by this point.
+//
+
+#define addU4(xx) { int a= xx; *p++= a; *p++= (a >>= 8); *p++= (a >>= 8); *p++= (a >>= 8); }
+#define addStr(xx) { char *q= xx; *p++= *q++; *p++= *q++; *p++= *q++; *p++= *q++; }
+
+void 
+writeWAV() {
+  char buf[44], *p= buf;
+  addStr("RIFF");
+  addU4(byte_count + 36);
+  addStr("WAVE");
+  addStr("fmt ");
+  addU4(16);
+  addU4(0x00020001);
+  addU4(out_rate);
+  addU4(out_rate * out_bps);
+  addU4(0x0004 + 0x10000*(out_bps*4));	// 2,4 -> 8,16 - always assume stereo
+  addStr("data");
+  addU4(byte_count);
+  writeOut(buf, 44);
+
+  if (out_mode == 1) {
+    short test= 0x0011;
+    if (!*(char*)&test) out_mode= 2;		// Turn on byte-swapping
+  }
 
   if (!opt_Q)
     fprintf(stderr, 
-	    "Outputting %d-bit audio at %d Hz with %d %d-sample fragments, %d ms per fragment\n",
-	    out_mode ? 8 : 16, out_rate, info.fragstotal, out_blen/2, out_buf_ms);
+	    "Outputting %d-bit WAV data at %d Hz, file size %d bytes\n",
+	    out_mode ? 16 : 8, out_rate, byte_count + 44);
 }
 
 //
@@ -1258,7 +1363,8 @@ readTimeLine() {
       tim= (tim + rtim) % H24;
   }
 
-  if (fast_tim0 < 0) fast_tim0= tim;
+  if (fast_tim0 < 0) fast_tim0= tim;		// First time
+  fast_tim1= tim;				// Last time
       
   if (!(p= getWord())) badSeq();
       

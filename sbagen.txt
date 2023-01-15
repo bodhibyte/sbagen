@@ -211,7 +211,7 @@ Outputting to a pipe or a file
 ------------------------------
 
 You don't need to read this section if you will only be outputting
-directly to the soundcard.
+directly to the soundcard. 
 
 If you wish to pipe output on to some other utility, use the -O
 option.  When this is used, the real time is no longer checked, so you
@@ -221,8 +221,9 @@ will use exactly the frequency specified, or otherwise all the
 frequencies and timings will be out.
 
 The -o option can also be used to output directly to a file.  In both
-cases headerless raw data is output.  For example, to pipe to bplay,
-you could use the following:
+cases headerless raw data is output (to write a WAV file, see the -W
+option below).  For example, to pipe to bplay, you could use the
+following:
 
 >> sbagen -r 8000 -O -i 100+0.92/30 200+4.2/15 | bplay -S -s 8000 -b 16
 
@@ -233,9 +234,21 @@ bplay, use:
 >> sbagen -r 8000 -o out.raw -L 0:45 -i 100+0.92/30 200+4.2/15
 >> bplay -S -s 8000 -b 16 out.raw
 
-The output file may be a few kilobytes larger than you expect - this
-is because output is generated in blocks, and the last block output
-may go over the time limit slightly.
+As an alternative to using -L, it is possible to use -S and -E to
+indicate that the output starts at the start of the sequence file
+rather than the real time (-S), and/or ends at the end of the sequence
+file rather than going on forever (-E).
+
+A WAV file can be output if one of these options is used (-L or -S/-E)
+using the -W option.  This is used in conjunction with -o or -O.
+Repeating the examples above using WAV files, we have:
+
+>> sbagen -r 8000 -WO -L 1:00 -i 100+0.92/30 200+4.2/15 | bplay
+
+and:
+
+>> sbagen -r 8000 -Wo out.wav -L 0:45 -i 100+0.92/30 200+4.2/15
+>> bplay out.wav
 
 The -Q option may be useful to turn off the information that the
 utility normally writes to the screen.
